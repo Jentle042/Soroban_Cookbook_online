@@ -12,6 +12,7 @@ members = [
     "cross-contract",
     "crowdfund",
     "custom-account",
+    "custom-types",
     "dutch-auction",
     "emergency-stop",
     "error-handling",
