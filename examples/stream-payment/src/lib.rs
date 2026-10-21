@@ -497,6 +497,36 @@ mod tests {
     }
 
     #[test]
+    fn withdraw_pays_only_vested_amount_and_second_call_in_same_ledger_pays_zero() {
+        let fixture = setup();
+        initialize(&fixture);
+
+        // Advance ledger to 50% through the stream duration
+        let mid_timestamp = START_TIME + 500;
+        set_time(&fixture.env, mid_timestamp);
+
+        // First check available amount at this timestamp: exactly 50% vested (5_000)
+        assert_eq!(fixture.client.available_amount(), 5_000);
+
+        // First withdraw call at mid_timestamp pays only the vested amount (5_000)
+        assert_eq!(fixture.client.withdraw(), 5_000);
+        assert_eq!(token_client(&fixture).balance(&fixture.recipient), 5_000);
+        assert_eq!(fixture.client.stream().withdrawn_amount, 5_000);
+
+        // Within the same ledger / timestamp, available_amount must now report 0
+        assert_eq!(fixture.client.available_amount(), 0);
+
+        // A second call in the same ledger pays zero / returns contract error NothingToWithdraw
+        assert_eq!(
+            fixture.client.try_withdraw(),
+            Err(Ok(Error::NothingToWithdraw))
+        );
+        // Recipient balance unchanged
+        assert_eq!(token_client(&fixture).balance(&fixture.recipient), 5_000);
+        assert_eq!(fixture.client.stream().withdrawn_amount, 5_000);
+    }
+
+    #[test]
     fn view_functions_require_initialization() {
         let fixture = setup();
 
