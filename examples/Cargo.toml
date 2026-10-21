@@ -9,6 +9,7 @@ members = [
     "error-handling",
     "hello-world",
     "htlc-swap",
+    "multi-token-vault",
     "oracle-consumer",
     "simple-dao",
     "simple-voting",
