@@ -190,3 +190,21 @@ don't automate the judgment.
 - Search terms are typed by users and could in principle contain something
   personal. Do not export raw search terms outside the docs team.
 - Access to the GA4 property and the dashboard is limited to maintainers.
+
+
+
+
+<!-- ## Data handling
+
+- Analytics only runs for visitors who explicitly consent
+  ([DEPLOYMENT.md → Privacy model](./DEPLOYMENT.md#privacy-model)). Treat all
+  figures as **consented traffic only** — real totals are higher, and the gap is
+  not measurable. Never present these numbers as absolute traffic counts.
+- Ad blockers suppress GA4 for a meaningful share of a developer audience. This
+  dashboard is directionally useful, not an audit trail.
+- Search terms are typed by users and could in principle contain something
+  personal. Do not export raw search terms outside the docs team.
+- Access to the GA4 property and the dashboard is limited to maintainers. -->
+- Full data-handling practices are documented in our
+  [Privacy Policy](/docs/legal/privacy) (GDPR-compliant, with data-controller
+  contact, lawful basis, retention periods, and third-party processor details).

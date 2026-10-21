@@ -1,5 +1,6 @@
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
+import Head from '@docusaurus/Head';
 import React from 'react';
 import styles from '../../pages/404.module.css';
 
@@ -23,11 +24,20 @@ const recoveryLinks = [
     description: 'View source and contribute',
     external: true,
   },
+  {
+    href: '/docs/patterns/hello-world',
+    icon: '👋',
+    label: 'Hello World',
+    description: 'A minimal contract example',
+  },
 ];
 
 export default function NotFound() {
   return (
     <Layout title="404 – Page Not Found">
+      <Head>
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
       <main className={styles.wrapper}>
         <div className={styles.glowOne} aria-hidden="true" />
         <div className={styles.glowTwo} aria-hidden="true" />

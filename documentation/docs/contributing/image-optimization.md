@@ -62,7 +62,7 @@ All images should use lazy loading except for:
 ```tsx
 <OptimizedImage
   src="/img/example.png"
-  alt="Description"
+  alt="Example workflow diagram illustrating image optimization steps"
   loading="lazy" // Default for OptimizedImage
 />
 ```
@@ -90,7 +90,7 @@ const { isDarkTheme } = useThemeContext();
 
 <OptimizedImage
   src={isDarkTheme ? '/img/example-dark.png' : '/img/example.png'}
-  alt="Description"
+  alt="Dark mode architectural graphic variant"
   width={300}
   height={200}
 />;

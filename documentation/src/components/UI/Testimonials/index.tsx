@@ -183,7 +183,7 @@ export default function Testimonials({
                   <img
                     className={styles.avatar}
                     src={item.avatarUrl}
-                    alt={`${item.name} avatar`}
+                    alt={item.name ? `${item.name} avatar` : 'Community contributor profile avatar'}
                     loading="lazy"
                     onError={() => setFailedAvatars((prev) => ({ ...prev, [index]: true }))}
                   />

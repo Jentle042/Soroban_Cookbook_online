@@ -59,6 +59,46 @@ test.describe('Redirects', () => {
   });
 });
 
+test.describe('Search page', () => {
+  test('search results page loads and shows the search input', async ({ page }) => {
+    await page.goto('/search?q=hello');
+    await expect(page.getByRole('heading', { name: /search/i })).toBeVisible();
+    // Local-search plugin input (SSR or hydrated); avoid requiring a <main>
+    // landmark — the search layout uses theme-layout-main without role=main.
+    const searchInput = page.locator('input[name="q"], input[type="search"]').first();
+    await expect(searchInput).toBeVisible();
+  });
+
+  test('search page has the site title in head', async ({ page }) => {
+    await page.goto('/search?q=soroban');
+    // Plugin sets document title to the search page heading.
+    await expect(page).toHaveTitle(/search/i);
+  });
+});
+
+test.describe('404 page', () => {
+  test('unknown route serves the 404 page with correct heading', async ({ page }) => {
+    await page.goto('/this-route-does-not-exist');
+    await expect(page.getByRole('main')).toBeVisible();
+    // Custom 404 page renders "Page Not Found" as the h1.
+    await expect(page.getByRole('heading', { name: /page not found/i })).toBeVisible();
+  });
+
+  test('404 page has a link back to Home', async ({ page }) => {
+    await page.goto('/this-route-does-not-exist');
+    const homeLink = page.getByRole('link', { name: /back to home/i });
+    await expect(homeLink).toBeVisible();
+    await expect(homeLink).toHaveAttribute('href', '/');
+  });
+
+  test('404 page contains recovery navigation links', async ({ page }) => {
+    await page.goto('/this-route-does-not-exist');
+    // The recovery nav has Documentation and Pattern Library links.
+    await expect(page.getByRole('link', { name: /documentation/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /pattern library/i }).first()).toBeVisible();
+  });
+});
+
 test.describe('Accessibility – basic', () => {
   test('homepage has exactly one <h1>', async ({ page }) => {
     await page.goto('/');
@@ -69,6 +109,24 @@ test.describe('Accessibility – basic', () => {
   test('all images on homepage have alt text', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+    // Evaluate once — iterating nth(i) races with lazy-loaded/detached images.
+    const missing = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('img'))
+        .map((img, i) => ({ i, alt: img.getAttribute('alt'), src: img.getAttribute('src') }))
+        .filter((x) => x.alt === null),
+    );
+    expect(missing, `Images missing alt: ${JSON.stringify(missing)}`).toEqual([]);
+    // Snapshot alts in one evaluate to avoid flaky nth() on lazy/detached imgs
+    const images = await page.locator('img').evaluateAll((imgs) =>
+      imgs.map((img) => ({
+        src: img.getAttribute('src') ?? '',
+        alt: img.getAttribute('alt'),
+      })),
+    );
+    expect(images.length).toBeGreaterThan(0);
+    for (const { src, alt } of images) {
+      expect(alt, `Image ${src || '(no src)'} is missing alt text`).not.toBeNull();
+    }
 
     // Single evaluate avoids flaky per-image locator timeouts on lazy/detached nodes.
     const missingAlts = await page.evaluate(() =>

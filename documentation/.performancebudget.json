@@ -2,29 +2,34 @@
   "resourceSizes": [
     {
       "resourceType": "script",
-      "budget": 300
+      "budget": 280,
+      "description": "JS budget (kB) — lazy-split below-fold chunks reduce initial parse"
     },
     {
       "resourceType": "style",
-      "budget": 50
+      "budget": 50,
+      "description": "CSS budget (kB)"
     },
     {
       "resourceType": "image",
-      "budget": 200
+      "budget": 200,
+      "description": "Image budget (kB)"
     },
     {
       "resourceType": "font",
-      "budget": 50
+      "budget": 50,
+      "description": "Font budget (kB) — variable woff2 subsets only"
     },
     {
       "resourceType": "total",
-      "budget": 600
+      "budget": 580,
+      "description": "Total page weight budget (kB)"
     }
   ],
   "resourceBudgets": [
     {
       "resourceType": "script",
-      "budget": 300
+      "budget": 280
     },
     {
       "resourceType": "style",
@@ -35,22 +40,27 @@
     {
       "metric": "first-contentful-paint",
       "budget": 1500,
-      "description": "First Contentful Paint budget (mobile)"
+      "description": "FCP budget (ms, mobile throttled)"
     },
     {
       "metric": "largest-contentful-paint",
       "budget": 2500,
-      "description": "Largest Contentful Paint budget (mobile)"
+      "description": "LCP budget (ms, mobile throttled) — target < 2.5 s (Good threshold)"
     },
     {
       "metric": "time-to-interactive",
       "budget": 3500,
-      "description": "Time to Interactive budget (mobile)"
+      "description": "TTI budget (ms, mobile throttled)"
     },
     {
       "metric": "cumulative-layout-shift",
       "budget": 0.1,
-      "description": "Cumulative Layout Shift budget"
+      "description": "CLS budget — Good threshold per Web Vitals"
+    },
+    {
+      "metric": "total-blocking-time",
+      "budget": 200,
+      "description": "TBT budget (ms) — proxy for FID/INP on mobile"
     }
   ]
 }

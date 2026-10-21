@@ -16,6 +16,7 @@
  */
 
 import type { Metric } from 'web-vitals';
+import { hasConsent } from './analyticsConsent';
 
 /** POST target for beacon payloads. Falls through to console-only when blank. */
 const ANALYTICS_ENDPOINT = (typeof process !== 'undefined' && process.env.ANALYTICS_ENDPOINT) || '';
@@ -51,23 +52,16 @@ function sendToAnalytics(metric: Metric): void {
     console.info('[Web Vitals]', payload.name, payload.value, `(${payload.rating})`, payload);
   }
 
+  // Remote beacons are non-essential — require analytics consent.
+  if (!hasConsent()) {
+    return;
+  }
+
   // Send to custom analytics endpoint via Beacon API (non-blocking).
   if (ANALYTICS_ENDPOINT && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     const body = JSON.stringify(payload);
     navigator.sendBeacon(ANALYTICS_ENDPOINT, new Blob([body], { type: 'application/json' }));
-    return;
   }
-
-  // --- Google Analytics 4 integration (uncomment + remove the block above) ---
-  // if (typeof window !== 'undefined' && typeof (window as Window & { gtag?: Function }).gtag === 'function') {
-  //   (window as Window & { gtag: Function }).gtag('event', metric.name, {
-  //     value: payload.value,
-  //     metric_id: metric.id,
-  //     metric_value: metric.value,
-  //     metric_delta: metric.delta,
-  //     metric_rating: metric.rating,
-  //   });
-  // }
 }
 
 /**

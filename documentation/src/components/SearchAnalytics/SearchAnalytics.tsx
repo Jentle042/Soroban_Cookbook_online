@@ -62,8 +62,12 @@ export default function SearchAnalytics(): null {
       if (count === lastCount) {
         stableTicks += 1;
       } else {
+        // First observation establishes the baseline and already counts as
+        // one "stable reading"; this matches the test contract (and the
+        // intuitive reading of SETTLE_STABLE_TICKS=2) so that two ticks of
+        // the same result count settle the loop ~250ms sooner.
         lastCount = count;
-        stableTicks = 0;
+        stableTicks = 1;
       }
 
       elapsed += SETTLE_INTERVAL_MS;

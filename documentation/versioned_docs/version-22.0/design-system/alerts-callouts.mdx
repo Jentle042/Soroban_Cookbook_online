@@ -1,0 +1,316 @@
+---
+sidebar_position: 5
+title: Alerts & Callouts
+description: Alert and callout components for important messages and documentation emphasis
+---
+
+import { Alert } from '@site/src/components/Alert';
+import { Callout } from '@site/src/components/Callout';
+
+Standardized components for displaying important messages, warnings, and informational content with visual emphasis.
+
+## Alert Component
+
+Alerts display important messages with visual emphasis. They support four core variants: info, warning, error, and success.
+
+### Basic Usage
+
+#### Info Alert
+
+<Alert variant="info">
+  This is an informational message. Use it to provide helpful context or additional details.
+</Alert>
+
+```tsx
+<Alert variant="info">
+  This is an informational message. Use it to provide helpful context or additional details.
+</Alert>
+```
+
+#### Warning Alert
+
+<Alert variant="warning">
+  This is a warning message. Use it to caution users about potential issues or important
+  considerations.
+</Alert>
+
+```tsx
+<Alert variant="warning">
+  This is a warning message. Use it to caution users about potential issues.
+</Alert>
+```
+
+#### Error Alert
+
+<Alert variant="error">
+  This is an error message. Use it to communicate critical issues that require immediate attention.
+</Alert>
+
+```tsx
+<Alert variant="error">This is an error message. Use it to communicate critical issues.</Alert>
+```
+
+#### Success Alert
+
+<Alert variant="success">
+  This is a success message. Use it to confirm successful operations or positive outcomes.
+</Alert>
+
+```tsx
+<Alert variant="success">This is a success message. Use it to confirm successful operations.</Alert>
+```
+
+### With Titles
+
+<Alert variant="info" title="Did you know?">
+  You can add a title to provide additional context for your alert message.
+</Alert>
+
+```tsx
+<Alert variant="info" title="Did you know?">
+  You can add a title to provide additional context for your alert message.
+</Alert>
+```
+
+### Without Icons
+
+<Alert variant="warning" icon={false}>
+  This alert doesn't display an icon. Use this when you want a cleaner, text-focused appearance.
+</Alert>
+
+```tsx
+<Alert variant="warning" icon={false}>
+  This alert doesn't display an icon.
+</Alert>
+```
+
+### Inline Display
+
+Use inline alerts for contextual messages within text flow:
+
+<p>
+  Here's some text with an{' '}
+  <Alert variant="info" display="inline">
+    inline alert
+  </Alert>{' '}
+  embedded within it.
+</p>
+
+```tsx
+<Alert variant="info" display="inline">
+  inline alert
+</Alert>
+```
+
+### With Rich Content
+
+<Alert variant="success" title="Deployment Successful">
+  <p>Your smart contract has been deployed to the testnet.</p>
+  <ul>
+    <li>
+      Contract ID: <code>CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC</code>
+    </li>
+    <li>Network: Testnet</li>
+    <li>Gas used: 1,234,567</li>
+  </ul>
+  <p>
+    View your contract on the{' '}
+    <a href="https://stellar.expert" target="_blank" rel="noopener noreferrer">
+      Stellar Explorer
+    </a>
+  </p>
+</Alert>
+
+```tsx
+<Alert variant="success" title="Deployment Successful">
+  <p>Your smart contract has been deployed to the testnet.</p>
+  <ul>
+    <li>
+      Contract ID: <code>CDLZFC...</code>
+    </li>
+    <li>Network: Testnet</li>
+  </ul>
+</Alert>
+```
+
+## Callout Component
+
+Callouts are specialized alerts designed for documentation pages. They provide stronger visual emphasis and are ideal for highlighting important guidance, tips, and warnings.
+
+### Basic Usage
+
+#### Info Callout
+
+<Callout variant="info">
+  This is an informational callout. Use it to provide important context or background information
+  that readers should be aware of.
+</Callout>
+
+```tsx
+<Callout variant="info">
+  This is an informational callout. Use it to provide important context.
+</Callout>
+```
+
+#### Warning Callout
+
+<Callout variant="warning">
+  This is a warning callout. Use it to highlight potential pitfalls, breaking changes, or important
+  considerations that could affect implementation.
+</Callout>
+
+```tsx
+<Callout variant="warning">
+  This is a warning callout. Use it to highlight potential pitfalls.
+</Callout>
+```
+
+#### Error Callout
+
+<Callout variant="error">
+  This is an error callout. Use it to document common errors, anti-patterns, or critical issues that
+  developers must avoid.
+</Callout>
+
+```tsx
+<Callout variant="error">
+  This is an error callout. Use it to document common errors or anti-patterns.
+</Callout>
+```
+
+#### Success Callout
+
+<Callout variant="success">
+  This is a success callout. Use it to highlight best practices, recommended approaches, or
+  successful implementation patterns.
+</Callout>
+
+```tsx
+<Callout variant="success">This is a success callout. Use it to highlight best practices.</Callout>
+```
+
+#### Tip Callout
+
+<Callout variant="tip">
+  This is a tip callout. Use it to share helpful hints, optimization techniques, or pro tips that
+  can improve the developer experience.
+</Callout>
+
+```tsx
+<Callout variant="tip">
+  This is a tip callout. Use it to share helpful hints or optimization techniques.
+</Callout>
+```
+
+### Custom Titles
+
+<Callout variant="warning" title="Breaking Change in v2.0">
+  The <code>authorize</code> function signature has changed. Update your code to use the new{' '}
+  <code>authorize_with_context</code> function instead.
+</Callout>
+
+```tsx
+<Callout variant="warning" title="Breaking Change in v2.0">
+  The authorize function signature has changed.
+</Callout>
+```
+
+### Real-World Examples
+
+<Callout variant="tip" title="Gas Optimization">
+  When working with storage in Soroban, consider using <code>Persistent</code> storage for data that
+  needs to live beyond the contract's lifetime, and <code>Temporary</code> storage for ephemeral
+  data to save on gas costs.
+</Callout>
+
+<Callout variant="error" title="Common Mistake">
+  Never store sensitive data like private keys or passwords in contract storage. All contract data
+  is publicly visible on the blockchain.
+</Callout>
+
+<Callout variant="success" title="Best Practice">
+  Always validate input parameters at the beginning of your contract functions. This prevents
+  unnecessary computation and provides clear error messages to callers.
+</Callout>
+
+## API Reference
+
+### Alert Props
+
+| Prop        | Type                                          | Default   | Description                                                          |
+| ----------- | --------------------------------------------- | --------- | -------------------------------------------------------------------- |
+| `variant`   | `'info' \| 'warning' \| 'error' \| 'success'` | `'info'`  | Visual style variant                                                 |
+| `display`   | `'block' \| 'inline'`                         | `'block'` | Display mode                                                         |
+| `title`     | `string`                                      | -         | Optional title text                                                  |
+| `icon`      | `ReactNode \| boolean`                        | `true`    | Icon to display (true for default, false to hide, or custom element) |
+| `className` | `string`                                      | -         | Additional CSS classes                                               |
+| `onClose`   | `() => void`                                  | -         | Callback when close button is clicked                                |
+| `children`  | `ReactNode`                                   | -         | Alert content                                                        |
+
+### Callout Props
+
+| Prop        | Type                                                   | Default        | Description                                                          |
+| ----------- | ------------------------------------------------------ | -------------- | -------------------------------------------------------------------- |
+| `variant`   | `'info' \| 'warning' \| 'error' \| 'success' \| 'tip'` | `'info'`       | Visual style variant                                                 |
+| `title`     | `string`                                               | Auto-generated | Title text (defaults to variant name)                                |
+| `icon`      | `ReactNode \| boolean`                                 | `true`         | Icon to display (true for default, false to hide, or custom element) |
+| `className` | `string`                                               | -              | Additional CSS classes                                               |
+| `children`  | `ReactNode`                                            | -              | Callout content                                                      |
+
+## Accessibility
+
+Both components are built with accessibility in mind:
+
+- **Semantic HTML**: Uses appropriate ARIA roles (`alert` for Alert, `note` for Callout)
+- **Screen Reader Support**: Includes `aria-live` regions for dynamic alerts
+- **Keyboard Navigation**: Close buttons are fully keyboard accessible
+- **Color Contrast**: All variants meet WCAG AA standards for color contrast
+- **Dark Mode**: Full support with optimized colors for both light and dark themes
+- **High Contrast Mode**: Enhanced borders and font weights in high contrast mode
+- **Reduced Motion**: Respects `prefers-reduced-motion` user preferences
+
+## Usage Guidelines
+
+### When to Use Alerts
+
+- Inline feedback for user actions
+- Form validation messages
+- System status notifications
+- Temporary messages that may be dismissed
+
+### When to Use Callouts
+
+- Documentation emphasis
+- Important guidance in tutorials
+- Highlighting best practices or anti-patterns
+- Permanent informational content in docs
+
+### Variant Selection
+
+- **Info**: General information, helpful context, or neutral messages
+- **Warning**: Cautions, deprecation notices, or important considerations
+- **Error**: Critical issues, common mistakes, or things to avoid
+- **Success**: Confirmations, best practices, or recommended approaches
+- **Tip** (Callout only): Helpful hints, optimizations, or pro tips
+
+## Dark Mode Support
+
+All variants are optimized for both light and dark themes with appropriate color adjustments to maintain readability and visual hierarchy.
+
+<div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+  <div style={{ flex: 1 }}>
+    <h4>Light Mode</h4>
+    <Alert variant="info">Info in light mode</Alert>
+    <Alert variant="warning">Warning in light mode</Alert>
+  </div>
+</div>
+
+Toggle your theme to see how the components adapt automatically.
+
+---
+
+## Related links
+
+- [Alerts Component](/docs/components/alerts) — React alert reference
+- [Callouts Component](/docs/components/callouts) — callout variants
+- [Alert & Callout Showcase](/docs/components/alert-callout-showcase) — full feature demo

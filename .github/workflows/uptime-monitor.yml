@@ -71,7 +71,7 @@ jobs:
 
       - name: Alert on endpoint failure
         if: steps.probe.outputs.up == 'false' && secrets.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.27.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {
@@ -130,7 +130,7 @@ jobs:
 
       - name: Notify recovery after downtime
         if: secrets.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.27.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {
@@ -178,7 +178,7 @@ jobs:
 
       - name: Alert on SSL expiry (≤7 days)
         if: steps.ssl.outputs.days_left != '' && steps.ssl.outputs.days_left <= 7 && secrets.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.27.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {

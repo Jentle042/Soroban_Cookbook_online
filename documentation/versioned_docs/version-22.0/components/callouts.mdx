@@ -1,0 +1,61 @@
+---
+sidebar_position: 5
+title: Callouts
+description: Callout components for documentation emphasis
+---
+
+import { Callout } from '@site/src/components/Callout';
+
+Specialized alert components for documentation with stronger visual emphasis.
+
+## Examples
+
+### All Variants
+
+<Callout variant="info">This is an informational callout providing important context.</Callout>
+
+<Callout variant="warning">This is a warning callout highlighting potential pitfalls.</Callout>
+
+<Callout variant="error">This is an error callout documenting common mistakes to avoid.</Callout>
+
+<Callout variant="success">This is a success callout highlighting best practices.</Callout>
+
+<Callout variant="tip">This is a tip callout sharing helpful optimization techniques.</Callout>
+
+### Real-World Examples
+
+<Callout variant="tip" title="Gas Optimization">
+  Use <code>Temporary</code> storage for ephemeral data to reduce gas costs in your Soroban
+  contracts.
+</Callout>
+
+<Callout variant="error" title="Security Warning">
+  Never store private keys or sensitive credentials in contract storage. All data is publicly
+  visible on the blockchain.
+</Callout>
+
+<Callout variant="success" title="Best Practice">
+  Always implement proper authorization checks using Soroban's built-in <code>require_auth</code>{' '}
+  function.
+</Callout>
+
+## Usage
+
+```tsx
+import { Callout } from '@site/src/components/Callout';
+
+<Callout variant="tip">
+  Your helpful tip here
+</Callout>
+
+<Callout variant="warning" title="Custom Title">
+  Important warning message
+</Callout>
+```
+
+---
+
+## Related links
+
+- [Alerts & Callouts design tokens](/docs/design-system/alerts-callouts) — styling reference
+- [Alerts Component](/docs/components/alerts) — alert variant comparison

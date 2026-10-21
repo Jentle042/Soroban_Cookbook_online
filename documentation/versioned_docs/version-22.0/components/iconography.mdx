@@ -1,0 +1,135 @@
+---
+title: Iconography
+description: Guide for using icons in the Soroban Cookbook documentation
+---
+
+This guide covers the icon system used in the Soroban Cookbook documentation. We use [Lucide](https://lucide.dev/) as our icon library, chosen for its clean design, consistency, and excellent accessibility support.
+
+## Installation
+
+The icon library is already installed as a dependency:
+
+```bash
+npm install lucide-react
+```
+
+## Using the Icon Component
+
+Import the Icon component and any icons you need from `lucide-react`:
+
+```tsx
+import { Icon } from '@site/src/components/UI/Icon';
+import { Settings } from 'lucide-react';
+
+<Icon icon={Settings} size="md" />;
+```
+
+## Sizing System
+
+Icons support five predefined sizes:
+
+| Size | Value | Usage                     |
+| ---- | ----- | ------------------------- |
+| `xs` | 12px  | Tight spaces, badges      |
+| `sm` | 16px  | Inline with text, buttons |
+| `md` | 20px  | Default, content areas    |
+| `lg` | 24px  | Feature sections, heroes  |
+| `xl` | 32px  | Large displays, emphasis  |
+
+
+## Accessibility
+
+Icons are handled in two ways depending on their purpose:
+
+### Decorative Icons
+
+Use `decorative={true}` when the icon is purely decorative and doesn't add meaning:
+
+```tsx
+<Icon icon={BookOpen} size="md" decorative />
+```
+
+This hides the icon from screen readers.
+
+### Interactive Icons
+
+Provide an `ariaLabel` when the icon conveys meaning:
+
+```tsx
+<Icon icon={Download} size="sm" ariaLabel="Download PDF" />
+```
+
+## Examples
+
+### In Buttons
+
+```tsx
+import { ArrowRight } from 'lucide-react';
+
+<button className="sb-btn sb-btn-primary">
+  Get Started
+  <Icon icon={ArrowRight} size="sm" className="icon--right" />
+</button>;
+```
+
+
+### Status Icons
+
+```tsx
+<Icon icon={CheckCircle} size="md" className="icon--primary" ariaLabel="Success" />
+<Icon icon={AlertCircle} size="md" className="icon--muted" ariaLabel="Warning" />
+<Icon icon={XCircle} size="md" className="icon--muted" ariaLabel="Error" />
+```
+
+
+### With Text
+
+```tsx
+<div>
+  <Icon icon={Info} size="sm" className="icon--left" ariaLabel="Info" />
+  <span>Important information here</span>
+</div>
+```
+
+
+## Common Icons
+
+Here are commonly used icons in the documentation:
+
+### Navigation / Actions / Status / Content
+
+Browse the [Lucide icon gallery](https://lucide.dev/icons/) for the full set used across the cookbook.
+
+## Custom Props
+
+The Icon component accepts all Lucide props:
+
+```tsx
+<Icon icon={Settings} size="lg" color="#ff0000" strokeWidth={2} className="my-custom-class" />
+```
+
+## Best Practices
+
+1. **Use consistent sizing** - Stick to the predefined sizes
+2. **Provide labels for meaningful icons** - Always add `ariaLabel` or `decorative`
+3. **Use icons purposefully** - Don't over-decorate; icons should add value
+4. **Pair with text when possible** - Icons alone can be ambiguous
+5. **Use the same icon family** - Don't mix icon libraries
+
+## Finding More Icons
+
+Visit [Lucide Icons](https://lucide.dev/icons/) to browse all available icons. Simply import them by name:
+
+```tsx
+import { IconName } from 'lucide-react';
+```
+
+Replace `IconName` with the actual icon name (e.g., `Box`, `Rocket`, `Star`).
+
+---
+
+## Related links
+
+- [Typography System](/docs/design-system/typography) — icon sizing alongside type scale
+- [Button Component](/docs/components/buttons) — icons in buttons
+- [Responsive Breakpoints](/docs/responsive/breakpoints) — icon layout at different viewports

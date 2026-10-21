@@ -3,6 +3,11 @@ import clsx from 'clsx';
 import PatternCard from '../cards/PatternCard';
 import styles from './PatternPreview.module.css';
 import { sanitizeUrl } from '@site/src/utils/sanitizeUrl';
+import {
+  usePatternFilter,
+  CATEGORY_OPTIONS,
+  type CategoryValue,
+} from '@site/src/hooks/usePatternFilter';
 
 export interface Pattern {
   id: string;
@@ -27,8 +32,6 @@ export interface PatternPreviewProps {
   enableCarousel?: boolean;
 }
 
-const CATEGORIES = ['all', 'storage', 'tokens', 'governance', 'utility', 'defi', 'nft'];
-
 export default function PatternPreview({
   patterns,
   title = 'Popular Patterns',
@@ -38,15 +41,13 @@ export default function PatternPreview({
   maxVisible = 6,
   enableCarousel = true,
 }: PatternPreviewProps) {
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const { filters, setCategory, applyFilters } = usePatternFilter();
   const [viewMode, setViewMode] = useState<'grid' | 'carousel'>('carousel');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
-  const filteredPatterns = patterns.filter(
-    (pattern) => selectedCategory === 'all' || pattern.category === selectedCategory,
-  );
+  const filteredPatterns = applyFilters(patterns);
 
   const displayPatterns =
     enableCarousel && viewMode === 'carousel'
@@ -85,7 +86,7 @@ export default function PatternPreview({
   // Reset carousel index when category changes
   useEffect(() => {
     setCurrentIndex(0);
-  }, [selectedCategory]);
+  }, [filters.category]);
 
   return (
     <section className={styles.patternPreview}>
@@ -125,15 +126,13 @@ export default function PatternPreview({
         {/* Category Filter */}
         <div className={styles.filterContainer}>
           <div className={styles.categoryFilter}>
-            {CATEGORIES.map((category) => (
+            {CATEGORY_OPTIONS.map(({ value, label }) => (
               <button
-                key={category}
-                className={clsx(styles.categoryBtn, selectedCategory === category && styles.active)}
-                onClick={() => setSelectedCategory(category)}
-                aria-pressed={selectedCategory === category}>
-                {category === 'all'
-                  ? 'All Patterns'
-                  : category.charAt(0).toUpperCase() + category.slice(1)}
+                key={value}
+                className={clsx(styles.categoryBtn, filters.category === value && styles.active)}
+                onClick={() => setCategory(value as CategoryValue)}
+                aria-pressed={filters.category === value}>
+                {label}
               </button>
             ))}
           </div>

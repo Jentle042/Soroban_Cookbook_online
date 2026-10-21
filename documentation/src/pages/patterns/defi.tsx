@@ -1,67 +1,9 @@
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
-import PatternPreview, { Pattern } from '@site/src/components/PatternPreview';
+import PatternPreview from '@site/src/components/PatternPreview';
 import styles from '../index.module.css';
 import React from 'react';
-
-const defiPatterns: Pattern[] = [
-  {
-    id: '1',
-    contractName: 'liquidity_pool',
-    description: 'Automated market maker with liquidity provision and swap functionality.',
-    tag: '#defi',
-    category: 'defi',
-    difficulty: 'advanced',
-    popularity: 79,
-    code: `pub fn swap(env: Env, token_a: Address, token_b: Address, amount_in: i128) -> i128 {
-    // AMM swap logic
-}`,
-    href: '/docs/patterns/liquidity-pool',
-    icon: '💧',
-  },
-  {
-    id: '2',
-    contractName: 'staking',
-    description: 'Token staking with pro-rata reward distribution over fixed-length epochs.',
-    tag: '#defi',
-    category: 'defi',
-    difficulty: 'intermediate',
-    popularity: 82,
-    code: `pub fn stake(env: Env, amount: i128) {
-    // Staking logic
-}`,
-    href: '/docs/patterns/staking',
-    icon: '📈',
-  },
-  {
-    id: '3',
-    contractName: 'atomic_swap',
-    description: 'Trustless atomic swap mechanism for direct token exchanges.',
-    tag: '#defi',
-    category: 'defi',
-    difficulty: 'advanced',
-    popularity: 75,
-    code: `pub fn initiate_swap(env: Env, token_a: Address, token_b: Address, amount_a: i128) {
-    // Swap initiation logic
-}`,
-    href: '/docs/patterns/atomic-swap',
-    icon: '⚡',
-  },
-  {
-    id: '4',
-    contractName: 'lending_protocol',
-    description: 'Lending and borrowing protocol with collateralization and interest accrual.',
-    tag: '#defi',
-    category: 'defi',
-    difficulty: 'advanced',
-    popularity: 68,
-    code: `pub fn borrow(env: Env, asset: Address, amount: i128) {
-    // Borrowing logic
-}`,
-    href: '/docs/patterns/lending-protocol',
-    icon: '🏦',
-  },
-];
+import { defiPatterns } from '@site/src/fixtures/patterns';
 
 export default function DefiPage() {
   return (
@@ -79,6 +21,10 @@ export default function DefiPage() {
             Build decentralized finance applications with liquidity pools, staking, and swap
             mechanisms.
           </p>
+          <p role="note">
+            Educational examples only. The single-range concentrated-liquidity pool is explicitly
+            non-production software and must not be used with real funds.
+          </p>
 
           <div className={styles.buttons}>
             <Link to="/docs/patterns/overview" className={styles.secondaryBtn}>
@@ -92,7 +38,7 @@ export default function DefiPage() {
         <PatternPreview
           patterns={defiPatterns}
           title="DeFi Patterns"
-          subtitle="Explore production-ready DeFi contract implementations"
+          subtitle="Explore DeFi concepts and educational contract examples"
           showViewAll={false}
           maxVisible={6}
           enableCarousel={false}

@@ -11,6 +11,12 @@
     "e2e",
     "node_modules",
     "playwright.config.ts",
-    "**/__tests__/**"
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
   ]
 }

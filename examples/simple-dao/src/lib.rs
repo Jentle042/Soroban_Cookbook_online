@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #![no_std]
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol, Val, Vec,
@@ -16,6 +18,7 @@ pub struct DaoConfig {
     pub voting_period: u64,
     pub quorum: i128,
     pub approval_threshold_bps: u32,
+    pub timelock_delay: u64,
 }
 
 #[contracttype]
@@ -37,6 +40,8 @@ pub struct Proposal {
     pub start_time: u64,
     pub end_time: u64,
     pub executed: bool,
+    pub cancelled: bool,
+    pub queued_at: u64,
 }
 
 #[contracttype]
@@ -44,8 +49,11 @@ pub struct Proposal {
 pub enum ProposalState {
     Active,
     Passed,
+    Queued,
+    Executable,
     Executed,
     Rejected,
+    Cancelled,
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +81,9 @@ pub enum DataKey {
 
 const TOPIC_PROPOSAL_CREATED: Symbol = symbol_short!("new_prop");
 const TOPIC_VOTE_CAST: Symbol = symbol_short!("vote");
+const TOPIC_PROPOSAL_QUEUED: Symbol = symbol_short!("queue");
 const TOPIC_PROPOSAL_EXECUTED: Symbol = symbol_short!("execute");
+const TOPIC_PROPOSAL_CANCELLED: Symbol = symbol_short!("cancel");
 
 // ---------------------------------------------------------------------------
 // DAO contract
@@ -92,6 +102,7 @@ impl SimpleDao {
         voting_period: u64,
         quorum: i128,
         approval_threshold_bps: u32,
+        timelock_delay: u64,
     ) {
         assert!(
             !env.storage().instance().has(&DataKey::Config),
@@ -113,6 +124,7 @@ impl SimpleDao {
                 voting_period,
                 quorum,
                 approval_threshold_bps,
+                timelock_delay,
             },
         );
     }
@@ -152,6 +164,8 @@ impl SimpleDao {
             start_time: now,
             end_time: now + config.voting_period,
             executed: false,
+            cancelled: false,
+            queued_at: 0,
         };
 
         env.storage().instance().set(&DataKey::ProposalCount, &id);
@@ -174,9 +188,11 @@ impl SimpleDao {
             .get(&DataKey::Proposal(proposal_id))
             .expect("proposal not found");
 
+        assert!(!proposal.cancelled, "proposal already cancelled");
+        assert!(!proposal.executed, "proposal already executed");
+
         let now = env.ledger().timestamp();
         assert!(now <= proposal.end_time, "voting period has ended");
-        assert!(!proposal.executed, "proposal already executed");
 
         let vote_key = VoteKey {
             proposal_id,
@@ -206,8 +222,43 @@ impl SimpleDao {
             .publish((TOPIC_VOTE_CAST, proposal_id, approve), ());
     }
 
-    /// Execute a proposal that has passed. Iterates through the proposal's
-    /// actions and invokes each target contract.
+    /// Queue a proposal that has passed voting for timelocked execution.
+    /// Records the current timestamp so the timelock delay can be enforced
+    /// before execution.  May be called by anyone.
+    pub fn queue_proposal(env: Env, proposal_id: u32) {
+        let config: DaoConfig = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .expect("not initialized");
+
+        let mut proposal: Proposal = env
+            .storage()
+            .instance()
+            .get(&DataKey::Proposal(proposal_id))
+            .expect("proposal not found");
+
+        config.admin.require_auth();
+        assert!(!proposal.cancelled, "proposal already cancelled");
+        assert!(proposal.queued_at == 0, "proposal already queued");
+
+        let state = proposal.current_state(&config, env.ledger().timestamp());
+        assert_eq!(
+            state,
+            ProposalState::Passed,
+            "proposal is not in Passed state"
+        );
+
+        proposal.queued_at = env.ledger().timestamp();
+        env.storage()
+            .instance()
+            .set(&DataKey::Proposal(proposal_id), &proposal);
+        env.events().publish((TOPIC_PROPOSAL_QUEUED,), proposal_id);
+    }
+
+    /// Execute a proposal whose timelock has elapsed.  Iterates through
+    /// the proposal's actions and invokes each target contract.  May be
+    /// called by anyone once the delay has passed.
     pub fn execute_proposal(env: Env, proposal_id: u32) {
         let config: DaoConfig = env
             .storage()
@@ -221,13 +272,15 @@ impl SimpleDao {
             .get(&DataKey::Proposal(proposal_id))
             .expect("proposal not found");
 
+        config.admin.require_auth();
         assert!(!proposal.executed, "already executed");
+        assert!(!proposal.cancelled, "proposal already cancelled");
 
         let state = proposal.current_state(&config, env.ledger().timestamp());
         assert_eq!(
             state,
-            ProposalState::Passed,
-            "proposal is not in Passed state"
+            ProposalState::Executable,
+            "proposal is not executable — must be queued and timelock must have elapsed"
         );
 
         for action in proposal.actions.iter() {
@@ -240,6 +293,40 @@ impl SimpleDao {
             .set(&DataKey::Proposal(proposal_id), &proposal);
         env.events()
             .publish((TOPIC_PROPOSAL_EXECUTED,), proposal_id);
+    }
+
+    /// Cancel a proposal before it is executed.  Only the DAO admin or
+    /// the original proposal creator may cancel.  This acts as a safety
+    /// valve: if a malicious proposal passes voting, the admin can
+    /// cancel it during the timelock period before execution.
+    pub fn cancel_proposal(env: Env, caller: Address, proposal_id: u32) {
+        let config: DaoConfig = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .expect("not initialized");
+
+        let mut proposal: Proposal = env
+            .storage()
+            .instance()
+            .get(&DataKey::Proposal(proposal_id))
+            .expect("proposal not found");
+
+        assert!(!proposal.executed, "proposal already executed");
+        assert!(!proposal.cancelled, "proposal already cancelled");
+
+        // Only the admin or the original creator may cancel.
+        if caller != config.admin && caller != proposal.creator {
+            panic!("only admin or creator can cancel");
+        }
+        caller.require_auth();
+
+        proposal.cancelled = true;
+        env.storage()
+            .instance()
+            .set(&DataKey::Proposal(proposal_id), &proposal);
+        env.events()
+            .publish((TOPIC_PROPOSAL_CANCELLED,), proposal_id);
     }
 
     // -----------------------------------------------------------------------
@@ -282,6 +369,27 @@ impl SimpleDao {
         let key = VoteKey { proposal_id, voter };
         env.storage().instance().has(&DataKey::Vote(key))
     }
+
+    /// Return the earliest timestamp at which a queued proposal can be
+    /// executed, or 0 if the proposal has not been queued, has been
+    /// cancelled, or has already been executed.
+    pub fn executable_at(env: Env, proposal_id: u32) -> u64 {
+        let config: DaoConfig = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .expect("not initialized");
+        let proposal: Proposal = env
+            .storage()
+            .instance()
+            .get(&DataKey::Proposal(proposal_id))
+            .expect("proposal not found");
+
+        if proposal.executed || proposal.cancelled || proposal.queued_at == 0 {
+            return 0;
+        }
+        proposal.queued_at.saturating_add(config.timelock_delay)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -290,8 +398,17 @@ impl SimpleDao {
 
 impl Proposal {
     fn current_state(&self, config: &DaoConfig, now: u64) -> ProposalState {
+        if self.cancelled {
+            return ProposalState::Cancelled;
+        }
         if self.executed {
             return ProposalState::Executed;
+        }
+        if self.queued_at > 0 {
+            if now >= self.queued_at + config.timelock_delay {
+                return ProposalState::Executable;
+            }
+            return ProposalState::Queued;
         }
         if now <= self.end_time {
             return ProposalState::Active;
@@ -360,12 +477,19 @@ mod tests {
         let voting_period: u64 = 3600;
         let quorum: i128 = 3;
         let approval_threshold_bps: u32 = 5000;
+        let timelock_delay: u64 = 3600;
 
         env.mock_all_auths();
         let dao_id = env.register(SimpleDao, ());
         let dao = SimpleDaoClient::new(env, &dao_id);
 
-        dao.initialize(&admin, &voting_period, &quorum, &approval_threshold_bps);
+        dao.initialize(
+            &admin,
+            &voting_period,
+            &quorum,
+            &approval_threshold_bps,
+            &timelock_delay,
+        );
 
         DaoTest { admin, dao }
     }
@@ -398,13 +522,30 @@ mod tests {
         let dao_id = env.register(SimpleDao, ());
         let dao = SimpleDaoClient::new(&env, &dao_id);
 
-        dao.initialize(&admin, &3600, &3, &5000);
+        dao.initialize(&admin, &3600, &3, &5000, &3600);
 
         let config = dao.get_config();
         assert_eq!(config.admin, admin);
         assert_eq!(config.voting_period, 3600);
         assert_eq!(config.quorum, 3);
         assert_eq!(config.approval_threshold_bps, 5000);
+        assert_eq!(config.timelock_delay, 3600);
+    }
+
+    #[test]
+    fn test_initialize_zero_timelock_delay() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let dao_id = env.register(SimpleDao, ());
+        let dao = SimpleDaoClient::new(&env, &dao_id);
+
+        // Zero timelock is valid — it means immediate execution after queuing.
+        dao.initialize(&admin, &3600, &3, &5000, &0);
+
+        let config = dao.get_config();
+        assert_eq!(config.timelock_delay, 0);
     }
 
     #[test]
@@ -417,8 +558,8 @@ mod tests {
         let dao_id = env.register(SimpleDao, ());
         let dao = SimpleDaoClient::new(&env, &dao_id);
 
-        dao.initialize(&admin, &3600, &3, &5000);
-        dao.initialize(&admin, &3600, &3, &5000);
+        dao.initialize(&admin, &3600, &3, &5000, &3600);
+        dao.initialize(&admin, &3600, &3, &5000, &3600);
     }
 
     #[test]
@@ -431,7 +572,7 @@ mod tests {
         let dao_id = env.register(SimpleDao, ());
         let dao = SimpleDaoClient::new(&env, &dao_id);
 
-        dao.initialize(&admin, &0, &3, &5000);
+        dao.initialize(&admin, &0, &3, &5000, &3600);
     }
 
     // -----------------------------------------------------------------------
@@ -457,6 +598,8 @@ mod tests {
         assert_eq!(proposal.yes_votes, 0);
         assert_eq!(proposal.no_votes, 0);
         assert!(!proposal.executed);
+        assert!(!proposal.cancelled);
+        assert_eq!(proposal.queued_at, 0);
     }
 
     #[test]
@@ -633,6 +776,35 @@ mod tests {
     }
 
     #[test]
+    fn test_state_queued_after_queue() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        t.dao.vote(&t.admin, &id, &true);
+        let voter2 = Address::generate(&env);
+        t.dao.vote(&voter2, &id, &true);
+        let voter3 = Address::generate(&env);
+        t.dao.vote(&voter3, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Passed);
+
+        t.dao.queue_proposal(&id);
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Queued);
+    }
+
+    #[test]
     fn test_state_rejected_when_quorum_not_met() {
         let env = Env::default();
         let t = setup_dao(&env);
@@ -703,7 +875,115 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Execution
+    // Queue
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_queue_proposal_stores_timestamp() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        t.dao.vote(&t.admin, &id, &true);
+        let voter2 = Address::generate(&env);
+        t.dao.vote(&voter2, &id, &true);
+        let voter3 = Address::generate(&env);
+        t.dao.vote(&voter3, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        // Advance to a known timestamp
+        env.ledger().with_mut(|li| {
+            li.timestamp = 100_000;
+        });
+
+        t.dao.queue_proposal(&id);
+        let proposal = t.dao.get_proposal(&id);
+        assert_eq!(proposal.queued_at, 100_000);
+
+        let executable = t.dao.executable_at(&id);
+        assert_eq!(executable, 100_000 + 3600 /* timelock_delay */);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal is not in Passed state")]
+    fn test_queue_rejected_proposal_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+
+        let mock_id = register_mock(&env);
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "fail"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        // No votes, so it'll be rejected after voting period
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        t.dao.queue_proposal(&id);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal already queued")]
+    fn test_double_queue_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        t.dao.vote(&t.admin, &id, &true);
+        let voter2 = Address::generate(&env);
+        t.dao.vote(&voter2, &id, &true);
+        let voter3 = Address::generate(&env);
+        t.dao.vote(&voter3, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        t.dao.queue_proposal(&id);
+        t.dao.queue_proposal(&id);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal is not in Passed state")]
+    fn test_queue_active_proposal_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        // Still active, cannot queue
+        t.dao.queue_proposal(&id);
+    }
+
+    // -----------------------------------------------------------------------
+    // Execution (updated for timelock flow)
     // -----------------------------------------------------------------------
 
     #[test]
@@ -717,7 +997,7 @@ mod tests {
         let mock_id = register_mock(&env);
         let mock = MockTargetClient::new(&env, &mock_id);
 
-        dao.initialize(&admin, &3600, &1, &5000);
+        dao.initialize(&admin, &3600, &1, &5000, &3600);
 
         let proposer = Address::generate(&env);
         let id = dao.submit_proposal(
@@ -727,12 +1007,21 @@ mod tests {
         );
         dao.vote(&admin, &id, &true);
 
+        // Advance past voting period
         env.ledger().with_mut(|li| {
             li.timestamp += 7200;
         });
 
         assert_eq!(dao.proposal_state(&id), ProposalState::Passed);
         assert!(!mock.was_executed());
+
+        // Queue and wait for timelock
+        dao.queue_proposal(&id);
+        assert_eq!(dao.proposal_state(&id), ProposalState::Queued);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600; // timelock_delay
+        });
 
         dao.execute_proposal(&id);
 
@@ -754,7 +1043,7 @@ mod tests {
         let mock_id = register_mock(&env);
         let mock = MockTargetClient::new(&env, &mock_id);
 
-        dao.initialize(&admin, &3600, &1, &5000);
+        dao.initialize(&admin, &3600, &1, &5000, &3600);
 
         // Two actions calling the same mock with different no-arg functions
         let actions = vec![
@@ -778,12 +1067,18 @@ mod tests {
         });
 
         assert!(!mock.was_executed());
+        dao.queue_proposal(&id);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600;
+        });
+
         dao.execute_proposal(&id);
         assert!(mock.was_executed());
     }
 
     #[test]
-    #[should_panic(expected = "proposal is not in Passed state")]
+    #[should_panic(expected = "proposal is not executable")]
     fn test_execute_rejected_proposal_panics() {
         let env = Env::default();
         let t = setup_dao(&env);
@@ -804,6 +1099,137 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "proposal is not executable")]
+    fn test_execute_passed_not_queued_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+
+        let mock_id = register_mock(&env);
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "exec"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        t.dao.vote(&t.admin, &id, &true);
+        let voter2 = Address::generate(&env);
+        t.dao.vote(&voter2, &id, &true);
+        let voter3 = Address::generate(&env);
+        t.dao.vote(&voter3, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        // Passed but not queued — should panic
+        t.dao.execute_proposal(&id);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal is not executable")]
+    fn test_execute_before_timelock_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "exec"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        t.dao.vote(&t.admin, &id, &true);
+        let voter2 = Address::generate(&env);
+        t.dao.vote(&voter2, &id, &true);
+        let voter3 = Address::generate(&env);
+        t.dao.vote(&voter3, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        t.dao.queue_proposal(&id);
+
+        // Only advance halfway through the timelock
+        env.ledger().with_mut(|li| {
+            li.timestamp += 1800; // 1800 < 3600 timelock_delay
+        });
+
+        t.dao.execute_proposal(&id);
+    }
+
+    #[test]
+    fn test_execute_at_timelock_boundary() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let dao_id = env.register(SimpleDao, ());
+        let dao = SimpleDaoClient::new(&env, &dao_id);
+        let mock_id = register_mock(&env);
+        let mock = MockTargetClient::new(&env, &mock_id);
+
+        dao.initialize(&admin, &3600, &1, &5000, &3600);
+
+        let proposer = Address::generate(&env);
+        let id = dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "exec"),
+            &one_action_vec(&env, &mock_id),
+        );
+        dao.vote(&admin, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        dao.queue_proposal(&id);
+
+        // Advance exactly to the timelock boundary
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600;
+        });
+
+        // Should succeed — boundary is inclusive
+        dao.execute_proposal(&id);
+        assert!(mock.was_executed());
+    }
+
+    #[test]
+    fn test_execute_with_zero_timelock() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let dao_id = env.register(SimpleDao, ());
+        let dao = SimpleDaoClient::new(&env, &dao_id);
+        let mock_id = register_mock(&env);
+        let mock = MockTargetClient::new(&env, &mock_id);
+
+        // Zero timelock — execute immediately after queuing
+        dao.initialize(&admin, &3600, &1, &5000, &0);
+
+        let proposer = Address::generate(&env);
+        let id = dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "exec"),
+            &one_action_vec(&env, &mock_id),
+        );
+        dao.vote(&admin, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        dao.queue_proposal(&id);
+        // No time advance needed — timelock is 0
+        dao.execute_proposal(&id);
+        assert!(mock.was_executed());
+    }
+
+    #[test]
     #[should_panic(expected = "already executed")]
     fn test_double_execute_panics() {
         let env = Env::default();
@@ -814,7 +1240,7 @@ mod tests {
         let dao = SimpleDaoClient::new(&env, &dao_id);
         let mock_id = register_mock(&env);
 
-        dao.initialize(&admin, &3600, &1, &5000);
+        dao.initialize(&admin, &3600, &1, &5000, &3600);
 
         let proposer = Address::generate(&env);
         let id = dao.submit_proposal(
@@ -826,6 +1252,12 @@ mod tests {
 
         env.ledger().with_mut(|li| {
             li.timestamp += 7200;
+        });
+
+        dao.queue_proposal(&id);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600;
         });
 
         dao.execute_proposal(&id);
@@ -847,7 +1279,7 @@ mod tests {
         let mock_id = register_mock(&env);
         let mock = MockTargetClient::new(&env, &mock_id);
 
-        dao.initialize(&admin, &3600, &1, &5000);
+        dao.initialize(&admin, &3600, &1, &5000, &3600);
 
         let proposer = Address::generate(&env);
         let id = dao.submit_proposal(
@@ -863,6 +1295,12 @@ mod tests {
 
         assert_eq!(dao.proposal_state(&id), ProposalState::Passed);
         assert!(!mock.was_executed());
+        dao.queue_proposal(&id);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600;
+        });
+
         dao.execute_proposal(&id);
         assert!(mock.was_executed());
     }
@@ -878,7 +1316,7 @@ mod tests {
         let mock_id = register_mock(&env);
         let mock = MockTargetClient::new(&env, &mock_id);
 
-        dao.initialize(&admin, &3600, &3, &5000);
+        dao.initialize(&admin, &3600, &3, &5000, &3600);
 
         let alice = Address::generate(&env);
         let bob = Address::generate(&env);
@@ -903,10 +1341,278 @@ mod tests {
 
         assert_eq!(dao.proposal_state(&id), ProposalState::Passed);
 
+        // Queue and wait for timelock
+        dao.queue_proposal(&id);
+        assert_eq!(dao.proposal_state(&id), ProposalState::Queued);
+
         assert!(!mock.was_executed());
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600;
+        });
+
         dao.execute_proposal(&id);
         assert!(mock.was_executed());
 
         assert_eq!(dao.proposal_state(&id), ProposalState::Executed);
+    }
+
+    // -----------------------------------------------------------------------
+    // State transitions — Executable
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_state_executable_after_timelock() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        t.dao.vote(&t.admin, &id, &true);
+        let voter2 = Address::generate(&env);
+        t.dao.vote(&voter2, &id, &true);
+        let voter3 = Address::generate(&env);
+        t.dao.vote(&voter3, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        // Passed but not yet queued
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Passed);
+
+        t.dao.queue_proposal(&id);
+        // Queued before timelock expires
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Queued);
+
+        // Advance past the timelock
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600;
+        });
+
+        // Now it should be Executable
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Executable);
+    }
+
+    // -----------------------------------------------------------------------
+    // Cancel
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_cancel_by_admin() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        t.dao.cancel_proposal(&t.admin, &id);
+
+        let proposal = t.dao.get_proposal(&id);
+        assert!(proposal.cancelled);
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Cancelled);
+        assert_eq!(t.dao.executable_at(&id), 0);
+    }
+
+    #[test]
+    fn test_cancel_by_creator() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        // Creator cancels their own proposal
+        t.dao.cancel_proposal(&proposer, &id);
+
+        let proposal = t.dao.get_proposal(&id);
+        assert!(proposal.cancelled);
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Cancelled);
+    }
+
+    #[test]
+    #[should_panic(expected = "only admin or creator can cancel")]
+    fn test_cancel_unauthorized_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        let random = Address::generate(&env);
+        t.dao.cancel_proposal(&random, &id);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal already executed")]
+    fn test_cancel_executed_panics() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let dao_id = env.register(SimpleDao, ());
+        let dao = SimpleDaoClient::new(&env, &dao_id);
+        let mock_id = register_mock(&env);
+
+        dao.initialize(&admin, &3600, &1, &5000, &3600);
+
+        let proposer = Address::generate(&env);
+        let id = dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+        dao.vote(&admin, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        dao.queue_proposal(&id);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600;
+        });
+
+        dao.execute_proposal(&id);
+
+        // Cannot cancel an already-executed proposal
+        dao.cancel_proposal(&admin, &id);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal already cancelled")]
+    fn test_cancel_double_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        t.dao.cancel_proposal(&t.admin, &id);
+        t.dao.cancel_proposal(&t.admin, &id);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal already cancelled")]
+    fn test_queue_cancelled_proposal_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        // Vote to pass
+        t.dao.vote(&t.admin, &id, &true);
+        let voter2 = Address::generate(&env);
+        t.dao.vote(&voter2, &id, &true);
+        let voter3 = Address::generate(&env);
+        t.dao.vote(&voter3, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Passed);
+
+        // Cancel the passed proposal
+        t.dao.cancel_proposal(&t.admin, &id);
+
+        // Cannot queue a cancelled proposal
+        t.dao.queue_proposal(&id);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal already cancelled")]
+    fn test_execute_cancelled_proposal_panics() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        // Vote to pass and queue
+        t.dao.vote(&t.admin, &id, &true);
+        let voter2 = Address::generate(&env);
+        t.dao.vote(&voter2, &id, &true);
+        let voter3 = Address::generate(&env);
+        t.dao.vote(&voter3, &id, &true);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 7200;
+        });
+
+        t.dao.queue_proposal(&id);
+
+        // Cancel the queued proposal
+        t.dao.cancel_proposal(&t.admin, &id);
+
+        // Wait for timelock
+        env.ledger().with_mut(|li| {
+            li.timestamp += 3600;
+        });
+
+        // Cannot execute a cancelled proposal
+        t.dao.execute_proposal(&id);
+    }
+
+    #[test]
+    fn test_cancel_during_active_state() {
+        let env = Env::default();
+        let t = setup_dao(&env);
+        let mock_id = register_mock(&env);
+
+        let proposer = Address::generate(&env);
+        let id = t.dao.submit_proposal(
+            &proposer,
+            &String::from_str(&env, "p1"),
+            &one_action_vec(&env, &mock_id),
+        );
+
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Active);
+
+        // Admin can cancel even during active voting
+        t.dao.cancel_proposal(&t.admin, &id);
+        assert_eq!(t.dao.proposal_state(&id), ProposalState::Cancelled);
+
+        // Verify voting is now blocked on the cancelled proposal
+        let result = t.dao.try_vote(&t.admin, &id, &true);
+        assert!(result.is_err());
     }
 }

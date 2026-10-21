@@ -91,7 +91,7 @@ jobs:
           echo "Extracted $(find logs/extracted -type f | wc -l) log files"
 
       - name: Upload log archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: run-logs-${{ steps.target.outputs.run_id }}
           path: logs/extracted

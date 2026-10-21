@@ -101,10 +101,24 @@ Validates deployment configuration and workflow syntax.
 - bun.lock missing
 - Required GitHub Actions missing from deploy workflow
 
-#### 5. CI Summary (`summary`)
+#### 5. Test Code Examples (`test-examples`)
+Validates that all Rust code examples compile and pass their tests.
+
+**Steps:**
+- Checkout code
+- Install Rust stable
+- Cache Cargo registry
+- Check every example crate has a README
+- Run example tests
+
+**Failure Conditions:**
+- Any example crate is missing a README
+- Any example test fails (`cargo test`)
+
+#### 6. CI Summary (`summary`)
 Aggregates results from all CI jobs and reports overall status.
 
-**Runs After:** All other jobs (lint-format, typecheck, build-docs, validate-deployment)
+**Runs After:** All other jobs (lint-format, typecheck, build-docs, validate-deployment, test-examples)
 
 **Failure Conditions:**
 - Any upstream job fails
@@ -138,7 +152,20 @@ Deploys the built documentation to GitHub Pages.
 
 **Environment:** `github-pages`
 
-**Output:** Deployment URL available in workflow run details
+**Output:** Deployment URL available in workflow run details (`page_url` job output)
+
+#### 3. Deploy Status Notification (`notify`)
+Notifies the team of deploy success or failure via Slack and/or Discord.
+
+**Runs After:** `build` and `deploy` (always runs, including when either job fails)
+
+**Steps:**
+- Determine overall outcome from `needs.build.result` / `needs.deploy.result`
+- Send Slack notification when `SLACK_WEBHOOK_URL` is configured
+- Send Discord notification when `DISCORD_WEBHOOK_URL` is configured
+- Log a setup hint when neither webhook secret is present
+
+**Secrets (optional):** `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` — see [DEPLOYMENT.md](DEPLOYMENT.md) → Deploy Status Notifications
 
 ## Caching Strategy
 
@@ -238,6 +265,7 @@ To enforce CI checks, configure branch protection on `main`:
    - `CI / TypeScript Check`
    - `CI / Build Documentation`
    - `CI / Validate Deployment`
+   - `CI / Test Code Examples`
    - `CI / CI Summary`
 
 ## Troubleshooting
@@ -321,7 +349,7 @@ First run (without cache) may take 2-3x longer.
 
 - [ ] Add PR preview deployments
 - [ ] Add Lighthouse performance audits
-- [ ] Add deployment notifications
+- [x] Add deployment notifications
 - [ ] Add automated rollback on deployment failure
 - [ ] Add security scanning (SAST/dependency checks)
 - [ ] Add artifact retention policies
@@ -332,3 +360,11 @@ First run (without cache) may take 2-3x longer.
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment configuration guide
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
+
+
+
+<!-- ## Related Documentation
+
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment configuration guide
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [GitHub Actions Documentation](https://docs.github.com/en/actions) -->

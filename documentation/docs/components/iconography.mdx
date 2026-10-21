@@ -3,27 +3,6 @@ title: Iconography
 description: Guide for using icons in the Soroban Cookbook documentation
 ---
 
-import { Icon } from '@site/src/components/UI/Icon';
-import {
-  BookOpen,
-  Code,
-  Zap,
-  Settings,
-  CheckCircle,
-  AlertCircle,
-  Info,
-  XCircle,
-  ArrowRight,
-  Download,
-  ExternalLink,
-  Search,
-  Menu,
-  Sun,
-  Moon,
-  Github,
-  Terminal,
-} from 'lucide-react';
-
 This guide covers the icon system used in the Soroban Cookbook documentation. We use [Lucide](https://lucide.dev/) as our icon library, chosen for its clean design, consistency, and excellent accessibility support.
 
 ## Installation
@@ -57,7 +36,6 @@ Icons support five predefined sizes:
 | `lg` | 24px  | Feature sections, heroes  |
 | `xl` | 32px  | Large displays, emphasis  |
 
-<IconShowcase />
 
 ## Accessibility
 
@@ -94,17 +72,6 @@ import { ArrowRight } from 'lucide-react';
 </button>;
 ```
 
-<button
-  className="sb-btn sb-btn-primary"
-  style={{
-    marginTop: '1rem',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  }}>
-  Get Started
-  <Icon icon={ArrowRight} size="sm" className="icon--right" />
-</button>
 
 ### Status Icons
 
@@ -114,11 +81,6 @@ import { ArrowRight } from 'lucide-react';
 <Icon icon={XCircle} size="md" className="icon--muted" ariaLabel="Error" />
 ```
 
-<div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-  <Icon icon={CheckCircle} size="md" className="icon--primary" ariaLabel="Success" />
-  <Icon icon={AlertCircle} size="md" className="icon--muted" ariaLabel="Warning" />
-  <Icon icon={XCircle} size="md" className="icon--muted" ariaLabel="Error" />
-</div>
 
 ### With Text
 
@@ -129,63 +91,14 @@ import { ArrowRight } from 'lucide-react';
 </div>
 ```
 
-<div
-  style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    marginTop: '1rem',
-  }}>
-  <Icon icon={Info} size="sm" className="icon--left" ariaLabel="Info" />
-  <span>Important information here</span>
-</div>
 
 ## Common Icons
 
 Here are commonly used icons in the documentation:
 
-### Navigation
+### Navigation / Actions / Status / Content
 
-<IconGrid
-  icons={[
-    { icon: Menu, label: 'Menu' },
-    { icon: Search, label: 'Search' },
-    { icon: ArrowRight, label: 'Arrow Right' },
-    { icon: ExternalLink, label: 'External Link' },
-  ]}
-/>
-
-### Actions
-
-<IconGrid
-  icons={[
-    { icon: Download, label: 'Download' },
-    { icon: Settings, label: 'Settings' },
-    { icon: Github, label: 'GitHub' },
-    { icon: Terminal, label: 'Terminal' },
-  ]}
-/>
-
-### Status
-
-<IconGrid
-  icons={[
-    { icon: CheckCircle, label: 'Success' },
-    { icon: AlertCircle, label: 'Warning' },
-    { icon: XCircle, label: 'Error' },
-    { icon: Info, label: 'Info' },
-  ]}
-/>
-
-### Content
-
-<IconGrid
-  icons={[
-    { icon: BookOpen, label: 'Documentation' },
-    { icon: Code, label: 'Code' },
-    { icon: Zap, label: 'Quick/Fast' },
-  ]}
-/>
+Browse the [Lucide icon gallery](https://lucide.dev/icons/) for the full set used across the cookbook.
 
 ## Custom Props
 
@@ -212,104 +125,6 @@ import { IconName } from 'lucide-react';
 ```
 
 Replace `IconName` with the actual icon name (e.g., `Box`, `Rocket`, `Star`).
-
----
-
-export const IconShowcase = () => (
-  <div
-    style={{
-      display: 'flex',
-      gap: '1.5rem',
-      alignItems: 'flex-end',
-      marginTop: '1rem',
-      padding: '1rem',
-      background: 'var(--ifm-color-emphasis-100)',
-      borderRadius: '8px',
-    }}>
-    <div style={{ textAlign: 'center' }}>
-      <Icon icon={Zap} size="xs" ariaLabel="Extra small" />
-      <div
-        style={{
-          fontSize: '0.75rem',
-          marginTop: '0.5rem',
-          color: 'var(--ifm-color-emphasis-600)',
-        }}>
-        xs
-      </div>
-    </div>
-    <div style={{ textAlign: 'center' }}>
-      <Icon icon={Zap} size="sm" ariaLabel="Small" />
-      <div
-        style={{
-          fontSize: '0.75rem',
-          marginTop: '0.5rem',
-          color: 'var(--ifm-color-emphasis-600)',
-        }}>
-        sm
-      </div>
-    </div>
-    <div style={{ textAlign: 'center' }}>
-      <Icon icon={Zap} size="md" ariaLabel="Medium" />
-      <div
-        style={{
-          fontSize: '0.75rem',
-          marginTop: '0.5rem',
-          color: 'var(--ifm-color-emphasis-600)',
-        }}>
-        md
-      </div>
-    </div>
-    <div style={{ textAlign: 'center' }}>
-      <Icon icon={Zap} size="lg" ariaLabel="Large" />
-      <div
-        style={{
-          fontSize: '0.75rem',
-          marginTop: '0.5rem',
-          color: 'var(--ifm-color-emphasis-600)',
-        }}>
-        lg
-      </div>
-    </div>
-    <div style={{ textAlign: 'center' }}>
-      <Icon icon={Zap} size="xl" ariaLabel="Extra large" />
-      <div
-        style={{
-          fontSize: '0.75rem',
-          marginTop: '0.5rem',
-          color: 'var(--ifm-color-emphasis-600)',
-        }}>
-        xl
-      </div>
-    </div>
-  </div>
-);
-
-export const IconGrid = ({ icons }) => (
-  <div
-    style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-      gap: '1rem',
-      marginTop: '1rem',
-      padding: '1rem',
-      background: 'var(--ifm-color-emphasis-100)',
-      borderRadius: '8px',
-    }}>
-    {icons.map(({ icon: IconComponent, label }) => (
-      <div key={label} style={{ textAlign: 'center', padding: '0.5rem' }}>
-        <Icon icon={IconComponent} size="lg" ariaLabel={label} />
-        <div
-          style={{
-            fontSize: '0.75rem',
-            marginTop: '0.5rem',
-            color: 'var(--ifm-color-emphasis-600)',
-          }}>
-          {label}
-        </div>
-      </div>
-    ))}
-  </div>
-);
 
 ---
 

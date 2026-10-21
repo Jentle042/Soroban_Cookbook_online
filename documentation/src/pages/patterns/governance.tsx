@@ -1,54 +1,9 @@
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
-import PatternPreview, { Pattern } from '@site/src/components/PatternPreview';
+import PatternPreview from '@site/src/components/PatternPreview';
 import styles from '../index.module.css';
 import React from 'react';
-
-const governancePatterns: Pattern[] = [
-  {
-    id: '1',
-    contractName: 'voting_contract',
-    description: 'Decentralized voting system with proposal creation and voting mechanisms.',
-    tag: '#governance',
-    category: 'governance',
-    difficulty: 'advanced',
-    popularity: 76,
-    code: `pub fn vote(env: Env, voter: Address, proposal_id: u64, choice: bool) {
-    require_auth(voter);
-    // Voting logic here
-}`,
-    href: '/docs/patterns/voting-contract',
-    icon: '🗳️',
-  },
-  {
-    id: '2',
-    contractName: 'dao_token',
-    description: 'DAO governance token with delegation and voting power mechanisms.',
-    tag: '#governance',
-    category: 'governance',
-    difficulty: 'advanced',
-    popularity: 71,
-    code: `pub fn delegate(env: Env, from: Address, to: Address) {
-    // Delegation logic
-}`,
-    href: '/docs/patterns/dao-token',
-    icon: '🤝',
-  },
-  {
-    id: '3',
-    contractName: 'proposal_factory',
-    description: 'Factory for creating governance proposals with custom execution logic.',
-    tag: '#governance',
-    category: 'governance',
-    difficulty: 'advanced',
-    popularity: 63,
-    code: `pub fn create_proposal(env: Env, title: String, description: String) -> u64 {
-    // Proposal creation logic
-}`,
-    href: '/docs/patterns/proposal-factory',
-    icon: '📋',
-  },
-];
+import { governancePatterns } from '@site/src/fixtures/patterns';
 
 export default function GovernancePage() {
   return (

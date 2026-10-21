@@ -6,10 +6,68 @@
 import type { SearchFilterState } from '../components/SearchFilters';
 
 /**
- * Map document paths to their metadata (category, difficulty, tags)
+ * Map document paths to their metadata (category, difficulty, tags).
+ *
+ * Keys are the path segment after /docs/ with no leading or trailing slash.
+ * Keep entries sorted alphabetically within each section.
  */
 const DOCUMENT_METADATA: Record<string, DocumentMetadata> = {
-  // Getting Started
+  // ── Getting Started ────────────────────────────────────────────────────────
+  'getting-started/api-security': {
+    category: 'getting-started',
+    difficulty: 'advanced',
+    tags: ['auth'],
+  },
+  'getting-started/building-and-compilation': {
+    category: 'getting-started',
+    difficulty: 'beginner',
+    tags: [],
+  },
+  'getting-started/contract-interaction': {
+    category: 'getting-started',
+    difficulty: 'intermediate',
+    tags: [],
+  },
+  'getting-started/contract-testing': {
+    category: 'getting-started',
+    difficulty: 'intermediate',
+    tags: [],
+  },
+  'getting-started/debugging': {
+    category: 'getting-started',
+    difficulty: 'intermediate',
+    tags: ['errors'],
+  },
+  'getting-started/deploy-mainnet': {
+    category: 'getting-started',
+    difficulty: 'advanced',
+    tags: [],
+  },
+  'getting-started/deploy-testnet': {
+    category: 'getting-started',
+    difficulty: 'intermediate',
+    tags: [],
+  },
+  'getting-started/first-contract': {
+    category: 'getting-started',
+    difficulty: 'beginner',
+    tags: [],
+  },
+  'getting-started/js-sdk': {
+    category: 'getting-started',
+    difficulty: 'beginner',
+    tags: ['auth'],
+  },
+  'getting-started/local-testing': {
+    category: 'getting-started',
+    difficulty: 'beginner',
+    tags: [],
+  },
+  'getting-started/local-testing-and-simulation': {
+    category: 'getting-started',
+    difficulty: 'intermediate',
+    tags: [],
+  },
   'getting-started/setup': {
     category: 'getting-started',
     difficulty: 'beginner',
@@ -30,67 +88,32 @@ const DOCUMENT_METADATA: Record<string, DocumentMetadata> = {
     difficulty: 'beginner',
     tags: [],
   },
-  'getting-started/first-contract': {
-    category: 'getting-started',
-    difficulty: 'beginner',
-    tags: [],
-  },
-  'getting-started/building-and-compilation': {
-    category: 'getting-started',
-    difficulty: 'beginner',
-    tags: [],
-  },
-  'getting-started/deploy-testnet': {
-    category: 'getting-started',
-    difficulty: 'intermediate',
-    tags: [],
-  },
-  'getting-started/deploy-mainnet': {
-    category: 'getting-started',
-    difficulty: 'advanced',
-    tags: [],
-  },
-  'getting-started/contract-interaction': {
-    category: 'getting-started',
-    difficulty: 'intermediate',
-    tags: [],
-  },
-  'getting-started/debugging': {
-    category: 'getting-started',
-    difficulty: 'intermediate',
-    tags: [],
-  },
   'getting-started/testing-errors': {
     category: 'getting-started',
     difficulty: 'intermediate',
     tags: ['errors'],
   },
 
-  // Core Concepts
-  'concepts/introduction': {
+  // ── Core Concepts ──────────────────────────────────────────────────────────
+  'concepts/authorization': {
     category: 'concepts',
-    difficulty: 'beginner',
-    tags: [],
-  },
-  'concepts/overview': {
-    category: 'concepts',
-    difficulty: 'beginner',
-    tags: [],
+    difficulty: 'intermediate',
+    tags: ['auth'],
   },
   'concepts/best-practices': {
     category: 'concepts',
     difficulty: 'intermediate',
     tags: ['optimization'],
   },
-  'concepts/storage': {
+  'concepts/cross-contract-invocation': {
     category: 'concepts',
-    difficulty: 'intermediate',
-    tags: ['storage'],
+    difficulty: 'advanced',
+    tags: [],
   },
-  'concepts/authorization': {
+  'concepts/error-handling': {
     category: 'concepts',
     difficulty: 'intermediate',
-    tags: ['auth'],
+    tags: ['errors'],
   },
   'concepts/events': {
     category: 'concepts',
@@ -102,37 +125,52 @@ const DOCUMENT_METADATA: Record<string, DocumentMetadata> = {
     difficulty: 'intermediate',
     tags: ['optimization'],
   },
-  'concepts/cross-contract-invocation': {
+  'concepts/introduction': {
     category: 'concepts',
-    difficulty: 'advanced',
-    tags: [],
-  },
-
-  // Patterns
-  'patterns/hello-world': {
-    category: 'patterns',
     difficulty: 'beginner',
     tags: [],
   },
-  'patterns/custom-types': {
-    category: 'patterns',
+  'concepts/overview': {
+    category: 'concepts',
+    difficulty: 'beginner',
+    tags: [],
+  },
+  'concepts/storage': {
+    category: 'concepts',
+    difficulty: 'intermediate',
+    tags: ['storage'],
+  },
+  'concepts/testing-strategies': {
+    category: 'concepts',
     difficulty: 'intermediate',
     tags: [],
   },
+  'concepts/token-standards': {
+    category: 'concepts',
+    difficulty: 'intermediate',
+    tags: [],
+  },
+
+  // ── Patterns ───────────────────────────────────────────────────────────────
   'patterns/authorization': {
     category: 'patterns',
     difficulty: 'advanced',
     tags: ['auth'],
   },
-  'patterns/optimization-playbook': {
+  'patterns/basic-token': {
     category: 'patterns',
-    difficulty: 'advanced',
-    tags: ['optimization'],
+    difficulty: 'intermediate',
+    tags: ['storage', 'events'],
   },
-  'patterns/lifecycle-upgrades': {
+  'patterns/contract-factory': {
     category: 'patterns',
     difficulty: 'advanced',
     tags: [],
+  },
+  'patterns/custom-types': {
+    category: 'patterns',
+    difficulty: 'intermediate',
+    tags: ['storage'],
   },
   'patterns/error-handling': {
     category: 'patterns',
@@ -144,12 +182,77 @@ const DOCUMENT_METADATA: Record<string, DocumentMetadata> = {
     difficulty: 'advanced',
     tags: ['errors'],
   },
+  'patterns/escrow-multiparty': {
+    category: 'patterns',
+    difficulty: 'intermediate',
+    tags: ['auth', 'storage'],
+  },
+  'patterns/hello-world': {
+    category: 'patterns',
+    difficulty: 'beginner',
+    tags: ['storage'],
+  },
+  'patterns/lifecycle-upgrades': {
+    category: 'patterns',
+    difficulty: 'advanced',
+    tags: [],
+  },
+  'patterns/optimization-playbook': {
+    category: 'patterns',
+    difficulty: 'advanced',
+    tags: ['optimization'],
+  },
+  'patterns/oracle-consumer': {
+    category: 'patterns',
+    difficulty: 'advanced',
+    tags: ['events'],
+  },
+  'patterns/overview': {
+    category: 'patterns',
+    difficulty: 'beginner',
+    tags: [],
+  },
+  'patterns/proposal-lifecycle': {
+    category: 'patterns',
+    difficulty: 'advanced',
+    tags: ['auth', 'events'],
+  },
+  'patterns/timelock-vault': {
+    category: 'patterns',
+    difficulty: 'intermediate',
+    tags: ['storage'],
+  },
+  'patterns/token-standards': {
+    category: 'patterns',
+    difficulty: 'intermediate',
+    tags: [],
+  },
 
-  // Security
+  // ── Security ───────────────────────────────────────────────────────────────
+  'security/code-audit': {
+    category: 'security',
+    difficulty: 'advanced',
+    tags: [],
+  },
+  'security/defi-patterns': {
+    category: 'security',
+    difficulty: 'advanced',
+    tags: ['optimization'],
+  },
   'security/fundamentals': {
     category: 'security',
     difficulty: 'intermediate',
     tags: ['auth'],
+  },
+  'security/governance': {
+    category: 'security',
+    difficulty: 'advanced',
+    tags: ['auth', 'events'],
+  },
+  'security/token-audit': {
+    category: 'security',
+    difficulty: 'advanced',
+    tags: [],
   },
 };
 

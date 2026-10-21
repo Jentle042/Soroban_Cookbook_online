@@ -1,0 +1,307 @@
+---
+sidebar_position: 6
+title: Alert & Callout Showcase
+description: Complete showcase of alert and callout components
+---
+
+import { Alert } from '@site/src/components/Alert';
+import { Callout } from '@site/src/components/Callout';
+
+Complete demonstration of all alert and callout component features.
+
+## Alert Variants
+
+### Info
+
+<Alert variant="info">
+  This is an informational alert. Use it to provide helpful context or additional details to users.
+</Alert>
+
+### Warning
+
+<Alert variant="warning">
+  This is a warning alert. Use it to caution users about potential issues or important
+  considerations.
+</Alert>
+
+### Error
+
+<Alert variant="error">
+  This is an error alert. Use it to communicate critical issues that require immediate attention.
+</Alert>
+
+### Success
+
+<Alert variant="success">
+  This is a success alert. Use it to confirm successful operations or positive outcomes.
+</Alert>
+
+## Alert with Titles
+
+<Alert variant="info" title="Did You Know?">
+  Soroban contracts are compiled to WebAssembly for efficient execution on the Stellar network.
+</Alert>
+
+<Alert variant="warning" title="Deprecation Notice">
+  The old <code>invoke</code> function will be removed in version 2.0. Please migrate to{' '}
+  <code>invoke_contract</code>.
+</Alert>
+
+<Alert variant="error" title="Common Mistake">
+  Forgetting to call <code>require_auth()</code> can lead to unauthorized access to your contract
+  functions.
+</Alert>
+
+<Alert variant="success" title="Best Practice">
+  Always validate input parameters at the start of your contract functions to fail fast and save
+  gas.
+</Alert>
+
+## Alert Without Icons
+
+<Alert variant="info" icon={false}>
+  This alert doesn't display an icon for a cleaner, text-focused appearance.
+</Alert>
+
+<Alert variant="warning" icon={false}>
+  Sometimes you want the emphasis without the visual icon.
+</Alert>
+
+## Inline Alerts
+
+Here's a paragraph with an <Alert variant="info" display="inline">inline info alert</Alert> embedded within the text flow.
+
+You can also use <Alert variant="warning" display="inline">inline warnings</Alert> and <Alert variant="success" display="inline">inline success messages</Alert> seamlessly.
+
+## Alerts with Rich Content
+
+<Alert variant="success" title="Contract Deployed Successfully">
+  <p>Your Soroban smart contract has been deployed to the testnet.</p>
+  <ul>
+    <li>
+      <strong>Contract ID:</strong>{' '}
+      <code>CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC</code>
+    </li>
+    <li>
+      <strong>Network:</strong> Testnet
+    </li>
+    <li>
+      <strong>Gas Used:</strong> 1,234,567 stroops
+    </li>
+    <li>
+      <strong>Block:</strong> #12,345,678
+    </li>
+  </ul>
+  <p>
+    View your contract on{' '}
+    <a href="https://stellar.expert" target="_blank" rel="noopener noreferrer">
+      Stellar Expert
+    </a>
+  </p>
+</Alert>
+
+<Alert variant="error" title="Build Failed">
+  <p>Your contract failed to compile. Please fix the following errors:</p>
+  <ol>
+    <li>Missing semicolon on line 42</li>
+    <li>
+      Undefined variable <code>balance</code> on line 58
+    </li>
+    <li>
+      Type mismatch: expected <code>u64</code>, found <code>i32</code>
+    </li>
+  </ol>
+  <p>
+    Run <code>cargo check</code> for more details.
+  </p>
+</Alert>
+
+## Callout Variants
+
+### Info Callout
+
+<Callout variant="info">
+  This is an informational callout. Use it to provide important context or background information
+  that readers should be aware of before proceeding.
+</Callout>
+
+### Warning Callout
+
+<Callout variant="warning">
+  This is a warning callout. Use it to highlight potential pitfalls, breaking changes, or important
+  considerations that could affect implementation.
+</Callout>
+
+### Error Callout
+
+<Callout variant="error">
+  This is an error callout. Use it to document common errors, anti-patterns, or critical issues that
+  developers must avoid in their implementations.
+</Callout>
+
+### Success Callout
+
+<Callout variant="success">
+  This is a success callout. Use it to highlight best practices, recommended approaches, or
+  successful implementation patterns that developers should follow.
+</Callout>
+
+### Tip Callout
+
+<Callout variant="tip">
+  This is a tip callout. Use it to share helpful hints, optimization techniques, or pro tips that
+  can improve the developer experience and code quality.
+</Callout>
+
+## Callouts with Custom Titles
+
+<Callout variant="tip" title="Performance Optimization">
+  When iterating over large datasets in Soroban, consider using <code>Temporary</code> storage for
+  intermediate results. This can significantly reduce gas costs compared to <code>Persistent</code>{' '}
+  storage.
+</Callout>
+
+<Callout variant="warning" title="Breaking Change in v2.0">
+  The <code>authorize</code> function signature has changed. Update your code to use the new{' '}
+  <code>authorize_with_context</code> function that includes additional security parameters.
+</Callout>
+
+<Callout variant="error" title="Security Vulnerability">
+  Never store private keys, passwords, or other sensitive credentials in contract storage. All
+  contract data is publicly visible on the blockchain and can be read by anyone.
+</Callout>
+
+<Callout variant="success" title="Recommended Pattern">
+  Use the factory pattern for deploying multiple instances of similar contracts. This approach
+  reduces code duplication and makes upgrades easier to manage across your contract ecosystem.
+</Callout>
+
+## Real-World Documentation Examples
+
+<Callout variant="info" title="About Storage Types">
+  Soroban provides three types of storage: - **Temporary**: Deleted after a short period, cheapest
+  option - **Persistent**: Remains until explicitly deleted, moderate cost - **Instance**: Tied to
+  contract instance lifetime, balanced cost Choose the appropriate type based on your data lifecycle
+  requirements.
+</Callout>
+
+<Callout variant="tip" title="Gas Optimization Strategy">
+  To minimize gas costs in your Soroban contracts: 1. Use <code>Temporary</code> storage for
+  ephemeral data 2. Batch operations when possible to reduce transaction overhead 3. Implement early
+  returns to avoid unnecessary computation 4. Cache frequently accessed values in local variables 5.
+  Use efficient data structures (e.g., <code>Map</code> over <code>Vec</code> for lookups)
+</Callout>
+
+<Callout variant="warning" title="Common Pitfall">
+  When working with timestamps in Soroban, remember that <code>env.ledger().timestamp()</code>{' '}
+  returns the ledger close time, not the current wall clock time. This value only updates when a new
+  ledger is closed (approximately every 5 seconds).
+</Callout>
+
+<Callout variant="error" title="Anti-Pattern: Unbounded Loops">
+  Avoid unbounded loops in your contract code:
+  
+  ```rust
+  // ❌ BAD: Unbounded loop
+  while condition {
+      // This could run forever and exceed gas limits
+  }
+  
+  // ✅ GOOD: Bounded iteration
+  for i in 0..MAX_ITERATIONS {
+      if !condition { break; }
+      // Safe iteration with upper bound
+  }
+  ```
+  
+  Always set explicit limits to prevent gas exhaustion and ensure contract reliability.
+</Callout>
+
+<Callout variant="success" title="Best Practice: Input Validation">
+  Always validate input parameters at the beginning of your contract functions:
+  
+  ```rust
+  pub fn transfer(env: Env, from: Address, to: Address, amount: i128) {
+      // ✅ Validate inputs first
+      from.require_auth();
+      
+      if amount <= 0 {
+          panic!("Amount must be positive");
+      }
+      
+      if from == to {
+          panic!("Cannot transfer to self");
+      }
+      
+      // Now proceed with business logic
+      // ...
+  }
+  ```
+  
+  This pattern provides clear error messages and prevents wasted computation on invalid inputs.
+</Callout>
+
+## Callouts Without Icons
+
+<Callout variant="info" icon={false}>
+  This callout doesn't display an icon, providing a cleaner appearance when the visual indicator
+  isn't necessary.
+</Callout>
+
+<Callout variant="tip" icon={false}>
+  You can disable icons on any callout variant for a more minimalist documentation style.
+</Callout>
+
+## Mixed Usage Example
+
+Here's how you might use both components together in documentation:
+
+<Alert variant="info">
+  This tutorial assumes you have Rust and the Soroban CLI installed. If not, see the{' '}
+  <a href="/docs/getting-started/setup">setup guide</a>.
+</Alert>
+
+<Callout variant="tip" title="Quick Start">
+  New to Soroban? Start with our <a href="/docs/getting-started/first-contract">First Contract</a>{' '}
+  tutorial to learn the basics of smart contract development on Stellar.
+</Callout>
+
+<Alert variant="warning" title="Testnet Only">
+  The examples in this guide use the Stellar testnet. Never use testnet credentials or contracts on
+  mainnet.
+</Alert>
+
+<Callout variant="success" title="Learning Path">
+  After completing this tutorial, you'll understand: - How to structure a Soroban contract - Storage
+  patterns and best practices - Authorization and security fundamentals - Testing and deployment
+  workflows
+</Callout>
+
+## Accessibility Features
+
+Both components are built with accessibility in mind:
+
+- ✅ Semantic HTML with proper ARIA roles
+- ✅ Screen reader support with live regions
+- ✅ Keyboard navigation for interactive elements
+- ✅ WCAG AA color contrast compliance
+- ✅ Full dark mode support
+- ✅ High contrast mode enhancements
+- ✅ Reduced motion support
+
+Try navigating this page with:
+
+- **Keyboard**: Tab through the components
+- **Screen Reader**: Listen to the announcements
+- **Dark Mode**: Toggle your theme preference
+- **Zoom**: Test at 200% zoom level
+
+All components remain fully functional and accessible.
+
+---
+
+## Related links
+
+- [Alerts Component](/docs/components/alerts) — alert API reference
+- [Callouts Component](/docs/components/callouts) — callout API reference
+- [Alerts & Callouts design tokens](/docs/design-system/alerts-callouts) — styling spec

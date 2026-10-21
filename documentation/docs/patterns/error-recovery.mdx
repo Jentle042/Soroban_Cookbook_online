@@ -10,14 +10,25 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import { Callout } from '@site/src/components/Callout';
 import { Alert } from '@site/src/components/Alert';
+import { CodeSnippet } from '@site/src/components/CodeSnippet';
 
 ## Overview
 
 Robust error handling is critical for production smart contracts. This guide demonstrates try-catch patterns, fallback logic, graceful degradation, transaction rollback, and comprehensive validation strategies in Soroban.
 
+<PatternCallout variant="warning" title="Unaudited Example Code">
+
+The example code in this pattern is for educational purposes and has not been audited for production use. Always conduct a thorough security audit before deploying to mainnet.
+
+</PatternCallout>
+
 <Callout variant="info" title="Why Error Recovery Matters">
   Smart contracts handle valuable assets and critical operations. Proper error handling prevents
   fund loss, ensures predictable behavior, and provides clear feedback when operations fail.
+</Callout>
+
+<Callout variant="info" title="Decision Tree">
+  Before choosing an error strategy, review the [Error Handling concept](/docs/concepts/error-handling#decision-tree-panic-vs-result) decision tree for when to return `Result`, use `panic!`, or use `panic_with_error!`.
 </Callout>
 
 ## Prerequisites
@@ -892,5 +903,68 @@ Before deploying your contract, verify:
 ## Additional Resources
 
 - [Rust Error Handling](https://doc.rust-lang.org/book/ch09-00-error-handling.html)
+- [Soroban SDK Errors](https://docs.rs/soroban-sdk/latest/soroban_sdk/contracterror/index.html)
+- [Stellar Developer Docs](https://developers.stellar.org/docs/smart-contracts)
+
+
+## Code Comments Demo
+
+The CodeSnippet component below demonstrates the comment toggle feature. Click "Hide comments" to see the validation logic without detailed annotations:
+
+<CodeSnippet
+  code={`// Comprehensive validation function with detailed comments
+fn validate_order_params(
+    env: &Env,
+    amount: i128,
+    price: i128,
+    expiry: u64,
+) -> Result<(), Error> {
+    // Validate amount is positive and reasonable
+    if amount <= 0 {
+        return Err(Error::InvalidAmount);
+    }
+    
+    // Prevent excessive amounts that could overflow
+    if amount > 1_000_000_000 {
+        return Err(Error::AmountTooLarge);
+    }
+    
+    // Validate price is positive
+    if price <= 0 {
+        return Err(Error::InvalidPrice);
+    }
+    
+    // Get current ledger time for expiry validation
+    let current_time = env.ledger().timestamp();
+    
+    // Ensure expiry is in the future
+    if expiry <= current_time {
+        return Err(Error::ExpiryInPast);
+    }
+    
+    // Limit orders to a reasonable timeframe (30 days max)
+    let max_expiry = current_time + (30 * 24 * 60 * 60);
+    if expiry > max_expiry {
+        return Err(Error::ExpiryTooFar);
+    }
+    
+    Ok(())
+}`}
+  language="rust"
+  defaultShowComments={true}
+/>
+
+## Related Patterns
+
+- [Storage concepts](/docs/concepts/storage) - Understanding storage for rollback
+- [Authorization](/docs/concepts/authorization) - Auth error handling
+- [Security fundamentals](/docs/security/fundamentals) - Security best practices
+- [Hello World](/docs/patterns/hello-world) - Basic pattern structure
+
+## Additional Resources
+
+- [Rust Error Handling](https://doc.rust-lang.org/book/ch09-00-error-handling.html)
+- [Soroban SDK Errors](https://docs.rs/soroban-sdk/latest/soroban_sdk/contracterror/index.html)
+- [Stellar Developer Docs](https://developers.stellar.org/docs/smart-contracts)
 - [Soroban SDK Errors](https://docs.rs/soroban-sdk/latest/soroban_sdk/)
 - [Stellar Developer Docs](https://developers.stellar.org/docs/build/smart-contracts)

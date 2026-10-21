@@ -10,6 +10,14 @@ This guide explains how cross-contract calls work, where they can go wrong, and 
 
 ## How cross-contract calls work
 
+```mermaid
+flowchart LR
+    A["Contract A (Caller)"]
+    B["Contract B (Callee)"]
+    A -->|invoke_contract / typed client| B
+    B -->|return value / panic| A
+```
+
 When contract **A** calls contract **B**, Soroban executes the call inside the same transaction and the same resource budget. The host injects a new execution frame for contract B, passing the arguments and returning a result (or propagating a panic). The key properties:
 
 - **Synchronous** — there are no callbacks or async/await. The caller blocks until the callee returns.
@@ -47,6 +55,20 @@ impl Vault {
 ```
 
 The `TokenClient::new(&env, &token_id)` call binds the client to a specific contract address. From that point the call looks like a normal Rust method call; the SDK serialises arguments, dispatches the invocation to the host, and deserialises the return value.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Vault
+    participant Token
+
+    User->>Vault: deposit(token_id, sender, amount)
+    Vault->>User: require_auth()
+    User-->>Vault: auth approved
+    Vault->>Token: transfer(sender, vault, amount)
+    Token-->>Vault: ok
+    Vault-->>User: ok
+```
 
 ## Invocation patterns
 
@@ -95,6 +117,21 @@ self_client.some_function(&arg);
 > **Caution:** calling yourself can create unintended re-entrancy. Prefer explicit helper functions unless the authorisation model requires a self-invocation.
 
 ## Dependency boundaries
+
+```mermaid
+flowchart TD
+    subgraph App[Application Layer]
+        Vault["Vault Contract"]
+        Router["Router Contract"]
+    end
+    subgraph Infra[Infrastructure Layer]
+        Token["Token Contract"]
+        Oracle["Oracle Contract"]
+    end
+    Vault --> Token
+    Router --> Oracle
+    Router --> Token
+```
 
 A well-designed contract system treats cross-contract dependencies like external APIs:
 
@@ -204,7 +241,7 @@ pub fn update_token(env: Env, new_token: Address) {
 
 ### Limit the callee's authorisation scope
 
-Use `sub_invocations` in `require_auth_for_args` to bound what operations a callee can authorise on behalf of a user. This prevents a compromised callee from draining all of a user's assets.
+Use `sub_invocations` in `require_auth_for_args` to bound what operations a callee can authorise on behalf of a user. This prevents a compromised callee from draining all of a user's assets. See [Authorization Trees and Sub-Invocations](./authorization-trees.md) for how nested `require_auth` calls are matched against the signed call tree, and how to debug `Error(Auth, InvalidAction)` failures.
 
 ## Security considerations
 
@@ -330,10 +367,19 @@ When a cross-contract call fails unexpectedly:
 4. **Verify arguments** — serialisation mismatches are silent. Add `println!` or event emissions in the callee during development.
 5. **Review authorisation** — a missing `require_auth` call or wrong signer is the most common cause of silent authorisation failures.
 
+## Example layout
+
+A runnable multi-contract example is available in the repository:
+
+- [Cross-Contract Vault Pattern](../patterns/cross-contract.mdx) — token + vault + test layout, auth flow, and how to run the suite
+- [examples/cross-contract](https://github.com/Soroban-Cookbook/Soroban_Cookbook_online/tree/main/examples/cross-contract) — the deployed code used by the pattern page
+
 ## Next steps
 
 - [Authorization](./authorization.md) — how `require_auth` works and how to propagate it across contracts
+- [Authorization Trees and Sub-Invocations](./authorization-trees.md) — how nested `require_auth` calls are verified against the signed call tree
 - [Error Handling](./error-handling.md) — custom error types and the `try_*` pattern
 - [Gas and Resource Management](./gas-and-resources.md) — budget impact of cross-contract calls
 - [Security Fundamentals](../security/fundamentals.md) — reentrancy, access control, and safe patterns
 - [Error Recovery Pattern](../patterns/error-recovery.mdx) — fallback logic and graceful degradation
+- [Cross-Contract Vault Pattern](../patterns/cross-contract.mdx) — end-to-end example using token + vault + tests

@@ -10,12 +10,16 @@
 /* Issue #40: Mobile menu polish */
 @import './mobile-menu.css';
 
+/* Issue #135: Mobile responsiveness audit fixes */
+@import './mobile-audit.css';
+
 /* ── Light Mode (Default) ───────────────────────────────────────────────────── */
 
 :root {
   /* Typography — wire Infima to our design-token font stacks */
   --ifm-font-family-base: var(--font-family-sans);
   --ifm-font-family-monospace: var(--font-family-mono);
+  --ifm-font-size-base: var(--font-size-base);
 
   /* Primary Colors */
   --ifm-color-primary: #2e8555;
@@ -43,11 +47,17 @@
   --ifm-color-emphasis-200: #e5e7eb;
   --ifm-color-emphasis-300: #d1d5db;
   --ifm-color-emphasis-400: #9ca3af;
-  --ifm-color-emphasis-500: #6b7280;
+  --ifm-color-emphasis-500: #4b5563;
   --ifm-color-emphasis-600: #4b5563;
   --ifm-color-emphasis-700: #374151;
   --ifm-color-emphasis-800: #1f2937;
   --ifm-color-emphasis-900: #111827;
+
+  /* Navbar search placeholder and the `ctrl`/`K` hint <kbd> rendered by
+     docusaurus-search-local both use this token against
+     --ifm-color-emphasis-200. Infima's default (emphasis-500, #6b7280) only
+     reaches 3.9:1 on that background; emphasis-600 reaches 6.1:1. */
+  --ifm-navbar-search-input-placeholder-color: var(--ifm-color-emphasis-600);
 
   /* Card Colors */
   --ifm-card-background-color: #ffffff;
@@ -59,7 +69,11 @@
 
   /* Sidebar */
   --ifm-menu-color: #374151;
-  --ifm-menu-color-active: #2e8555;
+  /* Darker than primary so active links pass 4.5:1 on Infima's #f2f2f2 active bg */
+  --ifm-menu-color-active: #1b5e3a;
+  /* Primary (#2e8555) on the active menu background (#f2f2f2) is 4.1:1;
+     primary-darker reaches 5.3:1 and still reads as brand green. */
+  --ifm-menu-color-active: #277148;
   --ifm-menu-color-background-hover: rgba(46, 133, 85, 0.08);
 
   /* Footer */
@@ -196,6 +210,10 @@
   --ifm-color-emphasis-700: #e2e8f0;
   --ifm-color-emphasis-800: #f1f5f9;
   --ifm-color-emphasis-900: #f8fafc;
+
+  /* Same WCAG AA fix as the light theme: emphasis-500 (#94a3b8) is only 4.0:1
+     on emphasis-200 (#334155); emphasis-600 reaches 7.0:1. */
+  --ifm-navbar-search-input-placeholder-color: var(--ifm-color-emphasis-600);
 
   /* Card Colors */
   --ifm-card-background-color: #1e293b;
@@ -354,6 +372,31 @@ html {
   button {
     text-decoration: underline;
   }
+}
+
+/* ── Links in prose ─────────────────────────────────────────────────────────── */
+
+/* Docusaurus leaves body links undecorated, so inside a paragraph they are
+   distinguished from the surrounding text by colour alone — WCAG 1.4.1, and
+   what axe reports as `link-in-text-block`. Underline anchors that sit in a
+   run of text; card grids, nav and heading anchors are untouched. */
+.markdown
+  p
+  a:not(.hash-link):not([class*='card']):not([class*='Card']):not([class*='button']):not(
+    [class*='Button']
+  ),
+.markdown
+  li
+  a:not(.hash-link):not([class*='card']):not([class*='Card']):not([class*='button']):not(
+    [class*='Button']
+  ),
+.markdown
+  td
+  a:not(.hash-link):not([class*='card']):not([class*='Card']):not([class*='button']):not(
+    [class*='Button']
+  ) {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 /* ── Skip Link ──────────────────────────────────────────────────────────────── */
@@ -630,6 +673,34 @@ html {
   margin-top: -1px;
 }
 
+/* ── Breadcrumbs ────────────────────────────────────────────────────────────── */
+
+/* Breadcrumb link states — wired to design tokens so they follow the theme */
+
+.breadcrumbs__link {
+  border-radius: var(--radius-sm, 4px);
+  transition:
+    background-color var(--sb-motion-duration-fast, 120ms) var(--sb-motion-ease-standard, ease),
+    color var(--sb-motion-duration-fast, 120ms) var(--sb-motion-ease-standard, ease);
+}
+
+.breadcrumbs__link:hover {
+  background-color: var(--ifm-color-emphasis-100, #f3f4f6);
+}
+
+.breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--ifm-font-color-base, #374151);
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+[data-theme='dark'] .breadcrumbs__link:hover {
+  background-color: var(--ifm-color-emphasis-200, #334155);
+}
+
+[data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--ifm-font-color-base, #cbd5e1);
+}
+
 /* ── Icon System ────────────────────────────────────────────────────────────── */
 
 .icon {
@@ -733,5 +804,110 @@ html {
   .skeleton-loader,
   .spinner-loader {
     animation: none !important;
+  }
+}
+
+/* ── Scroll-Spy Sidebar Highlighting (issue #133 / Phase 4) ────────────────── */
+
+/**
+ * Applied programmatically by useScrollSpy to the <a> tag inside
+ * .theme-doc-sidebar-container that matches the currently visible heading.
+ *
+ * We deliberately piggyback on Infima's existing --ifm-menu-color-active and
+ * --ifm-menu-color-background-hover tokens so the highlight follows the
+ * project's light/dark colour scheme automatically.
+ */
+
+.theme-doc-sidebar-container a.scroll-spy-active {
+  color: var(--ifm-menu-color-active);
+  font-weight: 600;
+}
+
+/* Subtle left-border accent to make the active item visually distinct */
+.theme-doc-sidebar-container a.scroll-spy-active {
+  border-left: 3px solid var(--ifm-color-primary);
+  padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 3px);
+  background-color: var(--ifm-menu-color-background-hover);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .theme-doc-sidebar-container a.scroll-spy-active {
+    transition: none;
+  }
+}
+
+/* ── In-text link distinguishability (WCAG 1.4.1 / axe link-in-text-block) ── */
+.markdown a,
+.theme-doc-markdown a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.markdown a:hover,
+.theme-doc-markdown a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* ── Mobile Code Block Scroll (issue #186) ─────────────────────────────────── */
+
+/**
+ * Improves horizontal scrolling for code blocks on mobile devices.
+ * Adds padding, visual scroll indicators, and touch-friendly scrolling.
+ */
+
+@media (max-width: 768px) {
+  /* Add padding to code blocks for better mobile readability */
+  .theme-code-block {
+    padding-inline: 0.75rem;
+    padding-block: 0.5rem;
+  }
+
+  /* Ensure code blocks have smooth scrolling on touch devices */
+  pre code {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+  }
+
+  /* Add subtle fade indicator on right side to hint at horizontal scroll */
+  .theme-code-block::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 2rem;
+    background: linear-gradient(to right, transparent 0%, var(--ifm-background-surface-color) 100%);
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  /* Hide fade indicator when scrolled to the end */
+  .theme-code-block.scrolled-to-end::after {
+    opacity: 0;
+  }
+
+  /* Increase tap target size for copy button */
+  .theme-code-block .clean-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Ensure code is readable at 320px viewport (smallest mobile size) */
+@media (max-width: 320px) {
+  .theme-code-block {
+    font-size: 0.75rem;
+    padding-inline: 0.5rem;
+  }
+
+  pre code {
+    word-break: break-word;
+    white-space: pre-wrap;
   }
 }

@@ -1,0 +1,226 @@
+---
+time: 25
+sidebar_position: 4
+title: Designing Robust Custom Types
+description: Best practices for modeling, serialization, and evolution of custom data types in Soroban.
+image: /img/soroban-social-card.png
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import { Callout } from '@site/src/components/Callout';
+import { Alert } from '@site/src/components/Alert';
+
+## Overview
+
+In Soroban, types are more than just data containers—they define the contract's storage footprint, gas efficiency, and long-term maintainability. This guide covers strategies for designing custom types that are robust, efficient, and evolvable.
+
+<Callout variant="info" title="Why Type Design Matters">
+  Smart contracts are immutable by nature, but their state persists across upgrades. Poorly designed
+  types can lead to "storage bloat," high gas costs for reads/writes, and complex migrations when
+  business requirements change.
+</Callout>
+
+## Modeling Strategies
+
+When translating domain concepts (like "User Account" or "Liquidity Pool") into contract types, you must decide how to represent them in storage.
+
+### Value Objects vs. Entities
+
+- **Value Objects:** Types defined by their attributes (e.g., `Amount`, `Price`). In Soroban, these are usually small structs or newtype wrappers.
+- **Entities:** Types with a unique identity that persists over time (e.g., `User`, `Proposal`). These are typically stored as large structs keyed by a unique ID or `Address`.
+
+### The Newtype Pattern
+
+Use the "Newtype" pattern to wrap primitive types. This prevents accidental confusion between different units or IDs that share the same underlying type.
+
+```rust illustrative
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OrderId(pub u32);
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenId(pub u32);
+
+// Compiler will prevent passing a TokenId where an OrderId is expected
+pub fn get_order(env: Env, id: OrderId) { ... }
+```
+
+## The Soroban Type System
+
+Soroban uses a highly optimized serialization format (XDR). To make a custom type usable in a contract, it must be annotated with `#[contracttype]`.
+
+### Supported Types
+
+- **Structs:** For grouping related data.
+- **Enums:** For representing state or mutually exclusive options.
+- **Prims:** `i128`, `u32`, `Address`, `Bytes`, `Symbol`, etc.
+
+```rust illustrative
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ContractState {
+    Active,
+    Paused,
+    Upgrading(u32), // Enums can carry data
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Order {
+    pub id: OrderId,
+    pub owner: Address,
+    pub amount: i128,
+    pub status: ContractState,
+}
+```
+
+## Serialization & Gas Economics
+
+Every byte stored in the ledger costs gas. Serialization size directly impacts the `read_ledger_entry` and `write_ledger_entry` costs.
+
+### Optimization Tips
+
+1.  **Prefer Small Primitives:** Use `u32` or `u64` instead of `i128` if the value range allows.
+2.  **Avoid Unnecessary Strings:** Use `Symbol` for short, fixed strings (up to 32 characters). They are significantly cheaper than `String`.
+3.  **Flat vs. Nested:** Highly nested structs increase serialization complexity. Keep storage types as flat as possible.
+4.  **Bit-Packing (Advanced):** For extremely high-frequency operations, consider packing multiple booleans or small integers into a single `u64`.
+
+<Alert variant="warning" title="Read/Write Amplification">
+  Reading a 1KB struct to change a single boolean field still costs the gas for a 1KB read. If a
+  struct grows too large, consider splitting it into separate storage keys.
+</Alert>
+
+## Common Design Patterns
+
+### 1. The State Machine Pattern
+
+Use enums to manage the lifecycle of a contract or entity. This makes illegal transitions impossible at the type level.
+
+```rust illustrative
+#[contracttype]
+pub enum ProposalStatus {
+    Pending,
+    Voting { start_time: u64, end_time: u64 },
+    Executed,
+    Expired,
+}
+
+pub fn cast_vote(env: Env, id: u32) -> Result<(), Error> {
+    let proposal = get_proposal(&env, id)?;
+
+    match proposal.status {
+        ProposalStatus::Voting { start_time, end_time } => {
+            let now = env.ledger().timestamp();
+            if now < start_time || now > end_time {
+                return Err(Error::VotingNotActive);
+            }
+            // Proceed with voting...
+        }
+        _ => return Err(Error::InvalidStatus),
+    }
+    Ok(())
+}
+```
+
+### 2. The Configuration Struct
+
+Group global contract settings into a single struct. This is more efficient than storing 10 separate configuration variables in 10 different storage keys.
+
+```rust illustrative
+#[contracttype]
+pub struct Config {
+    pub admin: Address,
+    pub fee_bps: u32,
+    pub min_deposit: i128,
+}
+
+impl Config {
+    pub fn get(env: &Env) -> Self {
+        env.storage().instance().get(&DataKey::Config).unwrap()
+    }
+}
+```
+
+## Validation & Boundary Safety
+
+Never trust data coming into the contract. Validate types at the entry point (`contractimpl`).
+
+### Defensive Design
+
+- **Range Checks:** Ensure amounts are positive and within expected bounds.
+- **Sanitization:** Check that `Address` types aren't the null address if applicable.
+- **State Invariants:** Verify that the internal state of a struct is consistent (e.g., `start_time < end_time`).
+
+```rust illustrative
+pub fn create_order(env: Env, amount: i128) -> Result<(), Error> {
+    if amount <= 0 {
+        return Err(Error::InvalidAmount);
+    }
+    // ...
+}
+```
+
+## Evolution & State Migration
+
+As your project grows, you may need to add fields to your structs. Because storage is persistent, you must handle "schema drift."
+
+### The Versioned State Pattern
+
+Instead of storing a raw struct, store an enum that wraps different versions of the data.
+
+```rust illustrative
+#[contracttype]
+pub enum AccountState {
+    V1(AccountV1),
+    V2(AccountV2),
+}
+
+#[contracttype]
+pub struct AccountV1 {
+    pub balance: i128,
+}
+
+#[contracttype]
+pub struct AccountV2 {
+    pub balance: i128,
+    pub rewards_points: u64, // New field added in V2
+}
+
+// Lazy Migration
+pub fn get_account(env: &Env, user: Address) -> AccountV2 {
+    let state: AccountState = env.storage().persistent().get(&user).unwrap();
+    match state {
+        AccountState::V1(v1) => {
+            // Upgrade V1 to V2 on the fly
+            AccountV2 {
+                balance: v1.balance,
+                rewards_points: 0,
+            }
+        }
+        AccountState::V2(v2) => v2,
+    }
+}
+```
+
+## Security Considerations
+
+1.  **Integer Overflows:** Always use checked math (`checked_add`, `checked_mul`) when performing calculations on numeric types.
+2.  **Unbounded Collections:** Avoid using `Vec` or `Map` in storage types if they can grow indefinitely. This can lead to "gas exhaustion" attacks where reading the state becomes impossible.
+3.  **Type Confusion:** Use `Symbol` or `OrderId` wrappers to ensure you aren't using a user-provided integer to index into the wrong data structure.
+
+## Summary Checklist
+
+- [ ] All custom types are annotated with `#[contracttype]`.
+- [ ] Enums are used to represent state and avoid "boolean soup."
+- [ ] Newtype wrappers protect against ID/unit confusion.
+- [ ] Large structs are evaluated for potential splitting to save gas.
+- [ ] A migration strategy (like Versioned State) is planned for future updates.
+- [ ] Inputs are validated at the contract boundary.
+
+## Related Topics
+
+- [Storage Concepts](../concepts/storage.md)
+- [Error Handling](../concepts/error-handling.md)
+- [Authorization](../concepts/authorization.md)

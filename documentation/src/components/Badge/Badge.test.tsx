@@ -45,6 +45,12 @@ describe('Badge Component', () => {
     const badge = screen.getByText('deprecated');
     expect(badge).toHaveClass('custom-class');
   });
+
+  it('renders with draft variant', () => {
+    render(<Badge variant="draft" />);
+    const badge = screen.getByText('draft');
+    expect(badge).toHaveClass('sb-badge', 'sb-badge--draft');
+  });
 });
 
 describe('Tag Component', () => {
@@ -99,5 +105,11 @@ describe('Tag Component', () => {
       button.click();
       expect(handleClick).toHaveBeenCalled();
     }
+  });
+
+  it('renders with error-handling variant', () => {
+    render(<Tag variant="error-handling" />);
+    const tag = screen.getByText('error-handling');
+    expect(tag).toHaveClass('sb-tag', 'sb-tag--error-handling');
   });
 });

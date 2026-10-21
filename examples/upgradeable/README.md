@@ -1,0 +1,83 @@
+# Upgradeable Contract
+
+> Warning: This example is for learning and testing only. It is not audited, not a production-ready upgrade pattern, and should not be deployed with real funds or protocol-owned assets.
+>
+> The example demonstrates the mechanics of `env.deployer().update_current_contract_wasm()` and storage migration, but it does not include a full production security review, governance policy, or TTL-management plan for long-lived state. Persistent and instance storage in Soroban have finite TTLs and must be extended if you keep the state alive over long periods.
+
+A contract that swaps its own Wasm for a new version while preserving stored state, with the upgrade restricted to the admin.
+
+## What it demonstrates
+
+- `env.deployer().update_current_contract_wasm` driven by an admin call
+- State surviving the upgrade to the v2 implementation
+- A `version` entry point so callers can tell which build is live
+- **Lazy storage migration** with version byte tracking
+- Double-migrate protection (panics if called twice)
+
+## Learning path and scope
+
+Start with the [Lifecycle and Upgrade Safety guide](../../documentation/docs/patterns/lifecycle-upgrades.mdx), then work through this crate. This is the repository's only Soroban upgrade implementation: a contract upgrades its own Wasm behind an admin authorization check.
+
+Proxy, proxy-admin, beacon, and factory upgrade architectures are not included in this crate or the current Soroban examples. They are out of scope here, not implied follow-on steps.
+
+## Build
+
+```bash
+stellar contract build --manifest-path examples/upgradeable/Cargo.toml
+```
+
+The optimised Wasm is written to
+`examples/target/wasm32-unknown-unknown/release/upgradeable.wasm`.
+
+### Additional build step
+
+This example upgrades itself to a second contract, so the v2 Wasm must be built first:
+
+```bash
+cargo build --manifest-path examples/upgradeable/v2/Cargo.toml \
+  --target wasm32-unknown-unknown --release \
+  --target-dir examples/upgradeable/v2/target
+```
+
+`./scripts/test-examples.sh upgradeable` does this for you.
+
+## Test
+
+```bash
+# From the repository root — the same command CI runs
+./scripts/test-examples.sh upgradeable
+
+# Or invoke cargo directly
+cargo test --manifest-path examples/upgradeable/Cargo.toml
+```
+
+## Deploy to testnet
+
+```bash
+stellar contract deploy \
+  --wasm examples/target/wasm32-unknown-unknown/release/upgradeable.wasm \
+  --source my-testnet-account \
+  --network testnet
+```
+
+See [Deploy to Testnet](https://soroban-cookbook.dev/docs/getting-started/deploy-testnet) for account setup and funding.
+
+## Origin
+
+This example is original to the Soroban Cookbook repository. It is not adapted
+from any external source.
+
+Both crates in this directory — the main `upgradeable` package and the
+`upgradeable-v2` package under [`v2/`](v2/) — are covered by the same MIT
+license as the rest of the repository.
+
+## License
+
+MIT, matching the repository license. See [LICENSE](../../LICENSE) and the
+`license` field in `Cargo.toml`.
+
+## Related documentation
+
+- [Lifecycle and Upgrades](https://soroban-cookbook.dev/docs/patterns/lifecycle-upgrades) — the pattern page this example supports
+- [Pattern Library](https://soroban-cookbook.dev/docs/patterns/overview) — every documented pattern
+- [Adding a Tested Example](https://soroban-cookbook.dev/docs/contributing/add-tested-example) — how these crates are structured

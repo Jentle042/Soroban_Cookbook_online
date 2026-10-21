@@ -37,6 +37,7 @@ export default function OptimizedImage({
   const isRaster = /\.(jpg|jpeg|png)$/i.test(src);
   const webpSrc = webpSrcProp ?? (isRaster ? src.replace(/\.(jpg|jpeg|png)$/i, '.webp') : null);
   const mimeType = MIME_TYPES[ext] ?? `image/${ext}`;
+  const safeAlt = alt && alt.trim().length > 0 ? alt : 'Soroban documentation illustration';
 
   return (
     <picture className={clsx(styles.picture, className)}>
@@ -44,7 +45,7 @@ export default function OptimizedImage({
       <source srcSet={src} type={mimeType} />
       <img
         src={src}
-        alt={alt}
+        alt={safeAlt}
         width={width}
         height={height}
         loading={loading}

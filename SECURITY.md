@@ -69,6 +69,23 @@ The `NEWSLETTER_ENDPOINT` env var must be an `https://` URL. Set it at build tim
 NEWSLETTER_ENDPOINT=https://your-api.example.com/subscribe pnpm build
 ```
 
+### Rate limiting (issue #351)
+
+The static site has **no in-repo API**. Operators who set `NEWSLETTER_ENDPOINT` must
+enforce rate limits at the gateway (Cloudflare, API Gateway, Formspree, etc.).
+
+**Abuse scenario (documented):** An attacker scripts rapid `POST` requests with
+random emails. Without gateway limits this can fill a mailing list or exhaust
+provider quotas.
+
+| Layer | Control |
+|-------|---------|
+| Client | `NewsletterSignup` enforces a 3s submit cooldown, ignores in-flight double submits, and surfaces HTTP **429** as “Too many requests…”. |
+| Gateway (required when endpoint is live) | Cap e.g. **5 requests / IP / minute** on the subscribe path; return **429** with `Retry-After`. |
+| Provider | Prefer vendors with built-in bot / rate protection. |
+
+Client cooldown alone is not a security boundary — always configure the gateway.
+
 ## Reporting a vulnerability
 
 Report security issues privately via GitHub Security Advisories rather than opening a public issue.

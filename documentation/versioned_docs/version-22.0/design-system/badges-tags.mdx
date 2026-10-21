@@ -1,0 +1,257 @@
+---
+title: Badges & Tags
+description: Difficulty badges, category tags, status indicators, size variants, and accessibility guidelines for the Soroban Cookbook.
+sidebar_label: Badges & Tags
+---
+
+import { Badge, Tag } from '@site/src/components/Badge';
+
+Badges are small status indicators. Tags are categorical labels. Both are compact, color-coded, and accessible.
+
+The `Badge` and `Tag` React components are the canonical way to render these in docs and components. They map directly to the global `.sb-badge` / `.sb-tag` CSS classes in `badges-tags.css`.
+
+---
+
+## Difficulty Badges
+
+Visual skill-level indicators for recipes and tutorials.
+
+<div className="sb-badge-group" style={{ marginBottom: '1rem' }}>
+  <Badge variant="beginner">Beginner</Badge>
+  <Badge variant="intermediate">Intermediate</Badge>
+  <Badge variant="advanced">Advanced</Badge>
+</div>
+
+| Variant        | Color | Use                                         |
+| -------------- | ----- | ------------------------------------------- |
+| `beginner`     | Green | First contract, basic storage, hello-world  |
+| `intermediate` | Amber | Cross-contract calls, custom types, auth    |
+| `advanced`     | Red   | Upgradeable contracts, flash loans, oracles |
+
+### React usage
+
+```tsx
+import { Badge } from '@site/src/components/Badge';
+
+<Badge variant="beginner" />
+<Badge variant="intermediate" />
+<Badge variant="advanced" />
+```
+
+### HTML class usage
+
+```html
+<span class="sb-badge sb-badge--beginner">Beginner</span>
+<span class="sb-badge sb-badge--intermediate">Intermediate</span>
+<span class="sb-badge sb-badge--advanced">Advanced</span>
+```
+
+---
+
+## Status Badges
+
+Indicators for content freshness and availability.
+
+<div className="sb-badge-group" style={{ marginBottom: '1rem' }}>
+  <Badge variant="new">New</Badge>
+  <Badge variant="updated">Updated</Badge>
+  <Badge variant="stable">Stable</Badge>
+  <Badge variant="experimental">Experimental</Badge>
+  <Badge variant="draft">Draft</Badge>
+  <Badge variant="coming-soon">Coming Soon</Badge>
+  <Badge variant="deprecated">Deprecated</Badge>
+</div>
+
+| Variant        | Style            | Use                                |
+| -------------- | ---------------- | ---------------------------------- |
+| `new`          | Solid green      | Content added in the last 30 days  |
+| `updated`      | Solid blue       | Recently revised content           |
+| `stable`       | Solid teal       | Production-ready, well-tested      |
+| `experimental` | Purple tint      | Unstable API, subject to change    |
+| `draft`        | Gray tint        | Work in progress                   |
+| `coming-soon`  | Outlined neutral | Placeholder for unreleased content |
+| `deprecated`   | Solid red        | Should no longer be used           |
+
+### React usage
+
+```tsx
+<Badge variant="new" />
+<Badge variant="stable" />
+<Badge variant="deprecated" />
+```
+
+---
+
+## Category Tags
+
+Flexible labels for pattern and topic categorization.
+
+<div className="sb-tag-group" style={{ marginBottom: '1rem' }}>
+  <Tag variant="token">Token</Tag>
+  <Tag variant="defi">DeFi</Tag>
+  <Tag variant="nft">NFT</Tag>
+  <Tag variant="security">Security</Tag>
+  <Tag variant="storage">Storage</Tag>
+  <Tag variant="auth">Auth</Tag>
+  <Tag variant="governance">Governance</Tag>
+  <Tag variant="error-handling">Error Handling</Tag>
+</div>
+
+### React usage
+
+```tsx
+import { Tag } from '@site/src/components/Badge';
+
+<Tag variant="storage" />
+<Tag variant="defi" />
+<Tag variant="token" />
+```
+
+### HTML class usage
+
+```html
+<span class="sb-tag sb-tag--token">Token</span>
+<span class="sb-tag sb-tag--defi">DeFi</span>
+<span class="sb-tag sb-tag--storage">Storage</span>
+```
+
+---
+
+## Size Variants
+
+Three sizes for different contexts. Size modifiers work on both badges and tags.
+
+<div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+  <div className="sb-badge-group">
+    <Badge variant="beginner" size="sm">
+      Beginner sm
+    </Badge>
+    <Badge variant="intermediate" size="sm">
+      Intermediate sm
+    </Badge>
+    <Badge variant="advanced" size="sm">
+      Advanced sm
+    </Badge>
+  </div>
+  <div className="sb-badge-group">
+    <Badge variant="beginner" size="md">
+      Beginner md
+    </Badge>
+    <Badge variant="intermediate" size="md">
+      Intermediate md
+    </Badge>
+    <Badge variant="advanced" size="md">
+      Advanced md
+    </Badge>
+  </div>
+  <div className="sb-badge-group">
+    <Badge variant="beginner" size="lg">
+      Beginner lg
+    </Badge>
+    <Badge variant="intermediate" size="lg">
+      Intermediate lg
+    </Badge>
+    <Badge variant="advanced" size="lg">
+      Advanced lg
+    </Badge>
+  </div>
+</div>
+
+| Size | Class          | Height | Padding  | Font | Use case                           |
+| ---- | -------------- | ------ | -------- | ---- | ---------------------------------- |
+| `sm` | `sb-badge--sm` | 20px   | 2px 6px  | 11px | Inline with text, table cells      |
+| `md` | `sb-badge--md` | 24px   | 3px 8px  | 12px | Card headers, list items (default) |
+| `lg` | `sb-badge--lg` | 28px   | 4px 12px | 13px | Page headers, hero sections        |
+
+```tsx
+<Badge variant="new" size="sm" />
+<Badge variant="new" size="md" />   {/* default */}
+<Badge variant="new" size="lg" />
+
+<Tag variant="storage" size="sm" />
+<Tag variant="storage" size="lg" />
+```
+
+---
+
+## Interactive (Clickable) Badges & Tags
+
+Add `clickable` to get hover/focus/active states. Use `as="button"` or `as="a"` on `Tag` for proper semantics.
+
+<div className="sb-tag-group" style={{ marginBottom: '1rem' }}>
+  <Tag variant="defi" clickable as="button">
+    DeFi ↗
+  </Tag>
+  <Tag variant="token" clickable as="button">
+    Token ↗
+  </Tag>
+  <Tag variant="storage" clickable as="button">
+    Storage ↗
+  </Tag>
+</div>
+
+```tsx
+// Filter chip
+<Tag variant="defi" clickable as="button" onClick={handleFilter}>DeFi</Tag>
+
+// Navigation link
+<Tag variant="token" clickable as="a" href="/docs/patterns?tag=token">Token</Tag>
+```
+
+---
+
+## CSS Custom Properties
+
+All tokens live in `design-tokens.css`. Key variables:
+
+```css
+/* Sizes */
+--sb-badge-height-sm: 1.25rem;
+--sb-badge-height-md: 1.5rem;
+--sb-badge-height-lg: 1.75rem;
+
+/* Difficulty (light — auto-inverted in dark mode) */
+--sb-badge-beginner-bg: rgba(34, 197, 94, 0.15);
+--sb-badge-beginner-text: #15803d;
+--sb-badge-beginner-border: rgba(34, 197, 94, 0.35);
+
+/* Status */
+--sb-badge-new-bg: #16a34a;
+--sb-badge-new-text: #ffffff;
+
+/* Tags */
+--sb-tag-storage-bg: rgba(245, 158, 11, 0.12);
+--sb-tag-storage-text: #b45309;
+```
+
+---
+
+## Accessibility
+
+- Solid badges (New, Updated, Deprecated, Stable): white text on colored bg — passes WCAG AA at all sizes.
+- Subtle badges (Beginner, Intermediate, Advanced): dark text on tinted bg — minimum 4.5:1 ratio.
+- Coming Soon: muted text on transparent — border provides visual boundary.
+
+When the badge is decorative (paired with visible heading text), add `aria-hidden="true"`:
+
+```html
+<h3>
+  Deploy to Testnet <span class="sb-badge sb-badge--beginner" aria-hidden="true">Beginner</span>
+</h3>
+```
+
+When the badge is the only difficulty signal, use `asStatus` (React) or `role="status"` (HTML):
+
+```tsx
+<Badge variant="advanced" asStatus />
+```
+
+For clickable badges/tags, always use `<button>` or `<a>` — never `<span>` with `onClick`.
+
+---
+
+## Related links
+
+- [Typography System](/docs/design-system/typography) — type scale used with badges
+- [Pattern Library](/docs/patterns/overview) — difficulty and category tags on patterns
+- [Button System](/docs/design-system/buttons) — companion interactive tokens

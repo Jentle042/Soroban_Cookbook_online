@@ -1,55 +1,9 @@
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
-import PatternPreview, { Pattern } from '@site/src/components/PatternPreview';
+import PatternPreview from '@site/src/components/PatternPreview';
 import styles from '../index.module.css';
 import React from 'react';
-
-const tokenPatterns: Pattern[] = [
-  {
-    id: '1',
-    contractName: 'token_contract',
-    description:
-      'Implementation of a fungible token with mint, transfer, and balance functionality.',
-    tag: '#tokens',
-    category: 'tokens',
-    difficulty: 'intermediate',
-    popularity: 88,
-    code: `pub fn mint(env: Env, to: Address, amount: i128) {
-    env.storage().instance().extend_ttl(100, 100);
-    // Mint logic here
-}`,
-    href: '/docs/patterns/token-contract',
-    icon: '🪙',
-  },
-  {
-    id: '2',
-    contractName: 'token_wrapper',
-    description: 'Wrapper contract for bridging external tokens to Soroban.',
-    tag: '#tokens',
-    category: 'tokens',
-    difficulty: 'intermediate',
-    popularity: 72,
-    code: `pub fn wrap_token(env: Env, amount: i128) {
-    // Token wrapping logic
-}`,
-    href: '/docs/patterns/token-wrapper',
-    icon: '📦',
-  },
-  {
-    id: '3',
-    contractName: 'token_vault',
-    description: 'Secure token vault for holding and managing multiple token types.',
-    tag: '#tokens',
-    category: 'tokens',
-    difficulty: 'advanced',
-    popularity: 65,
-    code: `pub fn deposit(env: Env, token: Address, amount: i128) {
-    // Vault deposit logic
-}`,
-    href: '/docs/patterns/token-vault',
-    icon: '🏦',
-  },
-];
+import { tokenPatterns } from '@site/src/fixtures/patterns';
 
 export default function TokensPage() {
   return (

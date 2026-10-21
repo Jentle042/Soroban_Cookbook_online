@@ -1,14 +1,15 @@
 /**
  * Consent-gated loaders for GA4 (conversion funnel tracking, issue #362) and
- * Microsoft Clarity (heatmaps/session replay, issue #361). Neither script is
- * injected until `initAnalytics` is called with a granted consent — see
- * ConsentBanner, which calls this on mount (if consent was already granted in
- * a previous session) and again the moment the visitor clicks "Accept".
+ * Microsoft Clarity (heatmaps/session replay, issue #361), plus custom event
+ * helpers (issue #356). Neither third-party script is injected until
+ * `initAnalytics` is called with a granted consent — see ConsentBanner.
  *
  * CSP note: injecting these scripts requires `https://www.googletagmanager.com`
  * and `https://www.clarity.ms` to be allowlisted in `script-src`. Kept in sync
  * across docusaurus.config.ts, vercel.json, and static/_headers — see
  * DEPLOYMENT.md → Analytics.
+ *
+ * Custom events: see docs contributing/analytics-events.md
  */
 
 type ClarityFn = { (...args: unknown[]): void; q?: unknown[] };
@@ -25,6 +26,16 @@ export interface AnalyticsIds {
   gaMeasurementId?: string;
   clarityProjectId?: string;
 }
+
+export const ANALYTICS_EVENTS = {
+  SEARCH: 'search',
+  COPY_CODE: 'copy_code',
+  NEWSLETTER_SUBMIT: 'newsletter_submit',
+} as const;
+
+export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];
+
+export type AnalyticsParams = Record<string, string | number | boolean | undefined>;
 
 let loaded = false;
 
@@ -75,12 +86,30 @@ export function initAnalytics({ gaMeasurementId, clarityProjectId }: AnalyticsId
 }
 
 /**
- * Fires a GA4 event for funnel analysis (issue #362). Safe to call even when
- * analytics hasn't loaded (consent denied, or IDs unset) — it's just a no-op.
+ * Fire a custom analytics event. Safe to call during SSR and when GA is absent.
+ * Failures are swallowed so analytics never blocks UI interactions.
  */
-export function trackEvent(name: string, params: Record<string, string | number> = {}): void {
-  if (typeof window === 'undefined' || !window.gtag) return;
-  window.gtag('event', name, params);
+export function trackEvent(name: AnalyticsEventName | string, params: AnalyticsParams = {}): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const cleaned: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) {
+        cleaned[key] = value;
+      }
+    }
+
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', name, cleaned);
+    }
+
+    if (Array.isArray(window.dataLayer)) {
+      window.dataLayer.push({ event: name, ...cleaned });
+    }
+  } catch {
+    // Analytics must never break the application.
+  }
 }
 
 /**
@@ -119,6 +148,26 @@ export function trackSearch(term: string, resultCount: number): void {
   if (resultCount === 0) {
     trackEvent(SEARCH_EVENTS.noResults, { search_term: term });
   }
+}
+
+/** Track a successful code copy (issue #356). */
+export function trackCopyCode(options: { language?: string; section?: string }): void {
+  trackEvent(ANALYTICS_EVENTS.COPY_CODE, {
+    code_language: options.language ?? 'unknown',
+    code_section: options.section ?? 'code_block',
+  });
+}
+
+/** Track newsletter submission reaching the intended success state (issue #356). */
+export function trackNewsletterSubmit(
+  options: {
+    method?: 'endpoint' | 'demo';
+  } = {},
+): void {
+  trackEvent(ANALYTICS_EVENTS.NEWSLETTER_SUBMIT, {
+    submission_status: 'success',
+    submission_method: options.method ?? 'endpoint',
+  });
 }
 
 // ─── Documentation feedback (issue #359) ────────────────────────────────────

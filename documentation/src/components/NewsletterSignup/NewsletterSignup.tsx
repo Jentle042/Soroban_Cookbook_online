@@ -1,4 +1,4 @@
-import React, { useCallback, useId, useMemo, useState } from 'react';
+import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import clsx from 'clsx';
 import {
@@ -6,17 +6,28 @@ import {
   clearCSRFToken,
   updateCSRFTokenFromResponse,
 } from '../../utils/csrf';
+import { trackNewsletterSubmit } from '@site/src/utils/analytics';
 import styles from './NewsletterSignup.module.css';
 import { isHttpsUrl } from '@site/src/utils/sanitizeUrl';
 
 const EMAIL_RE =
   /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
+/** Client-side cooldown between newsletter submits (Phase 6 / issue #351). */
+export const NEWSLETTER_SUBMIT_COOLDOWN_MS = 3_000;
+
 export type NewsletterSignupProps = {
   className?: string;
 };
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
+
+function messageForHttpStatus(status: number): string {
+  if (status === 429) {
+    return 'Too many requests. Please wait a moment and try again.';
+  }
+  return 'Something went wrong. Try again in a moment.';
+}
 
 export default function NewsletterSignup({ className }: NewsletterSignupProps) {
   const {
@@ -42,6 +53,8 @@ export default function NewsletterSignup({ className }: NewsletterSignupProps) {
   const formId = useId();
   const emailId = `${formId}-email`;
   const errorId = `${formId}-error`;
+  const lastSubmitAtRef = useRef(0);
+  const inFlightRef = useRef(false);
 
   const validate = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -57,12 +70,27 @@ export default function NewsletterSignup({ className }: NewsletterSignupProps) {
   const onSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+
+      if (inFlightRef.current || status === 'loading' || status === 'success') {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastSubmitAtRef.current < NEWSLETTER_SUBMIT_COOLDOWN_MS) {
+        setStatus('error');
+        setMessage('Please wait a few seconds before trying again.');
+        return;
+      }
+
       const err = validate(email);
       if (err) {
         setStatus('error');
         setMessage(err);
         return;
       }
+
+      inFlightRef.current = true;
+      lastSubmitAtRef.current = now;
       setStatus('loading');
       setMessage(null);
 
@@ -71,10 +99,19 @@ export default function NewsletterSignup({ className }: NewsletterSignupProps) {
         setStatus('success');
         setMessage('Thanks — you are on the list. We will share Soroban Cookbook updates here.');
         setEmail('');
+        trackNewsletterSubmit({ method: 'demo' });
         return;
       }
 
       try {
+        if (!endpoint) {
+          await new Promise((r) => setTimeout(r, 600));
+          setStatus('success');
+          setMessage('Thanks — you are on the list. We will share Soroban Cookbook updates here.');
+          setEmail('');
+          return;
+        }
+
         // Get CSRF token for protection against CSRF attacks
         const csrfToken = getOrCreateCSRFToken();
 
@@ -93,18 +130,23 @@ export default function NewsletterSignup({ className }: NewsletterSignupProps) {
         updateCSRFTokenFromResponse(res);
 
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+          setStatus('error');
+          setMessage(messageForHttpStatus(res.status));
+          return;
         }
         setStatus('success');
         setMessage('Thanks — check your inbox to confirm your subscription.');
         setEmail('');
         clearCSRFToken();
+        trackNewsletterSubmit({ method: 'endpoint' });
       } catch {
         setStatus('error');
         setMessage('Something went wrong. Try again in a moment.');
+      } finally {
+        inFlightRef.current = false;
       }
     },
-    [email, endpoint, validate],
+    [email, endpoint, status, validate],
   );
 
   return (
@@ -153,10 +195,7 @@ export default function NewsletterSignup({ className }: NewsletterSignupProps) {
 
           <p className={styles.privacy}>
             We use your email only for Soroban Cookbook announcements. See our{' '}
-            <a href="https://github.com/Soroban-Cookbook/Soroban_Cookbook_online/blob/main/LICENSE">
-              license &amp; privacy
-            </a>{' '}
-            on GitHub.
+            <a href="/privacy">Privacy Policy</a>.
           </p>
 
           {message && (

@@ -1,185 +1,185 @@
-//! Multi-Token Vault
+// SPDX-License-Identifier: MIT
+
+//! # Multi-Token Vault
 //!
-//! A vault that accepts deposits of multiple distinct token types, identified
-//! by an `Address` (the token contract address).  Each user has an independent
-//! balance per token.  The vault tracks a global `vault_total` per token.
+//! A vault that holds accounting balances for **multiple different tokens**
+//! simultaneously. Any address may deposit any positive amount of any token
+//! address; the vault records the balance per (user, token) pair and allows
+//! partial or full withdrawals at any time.
 //!
-//! ## Entry-points
+//! ## What this example demonstrates
 //!
-//! | Function       | Description                                                  |
-//! |----------------|--------------------------------------------------------------|
-//! | `deposit`      | Deposit `amount` of `token` on behalf of `depositor`.        |
-//! | `withdraw`     | Withdraw `amount` of `token` from `depositor`'s balance.     |
-//! | `vault_total`  | Return the total amount of `token` held across all users.    |
-//! | `balance`      | Return `depositor`'s current balance for `token`.            |
+//! * Using a **compound storage key** (`DataKey::Balance(Address, Address)`)
+//!   to track per-user, per-token balances.
+//! * Keeping a **vault-wide total** per token for quick liquidity checks.
+//! * Proper **authorization** — only the depositing account may withdraw its
+//!   own balance.
+//! * **Input validation** and a complete **error taxonomy**.
+//! * The *accounting-only* pattern: the contract records amounts in storage
+//!   without performing SAC token transfers — it is intentionally scoped to
+//!   teach the multi-asset ledger pattern without cross-contract complexity.
 //!
-//! ## Invariants enforced by the contract
+//! ## Storage layout
 //!
-//! * `withdraw` panics with `Error::InsufficientBalance` when
-//!   `amount > depositor_balance`.
-//! * After a successful `withdraw(depositor, token, amount)`, `vault_total(token)`
-//!   decreases by exactly `amount`.
+//! All entries use **instance** storage (appropriate for a single-session
+//! demo).  Production vaults would use `persistent` storage and extend TTLs.
+//!
+//! | Key                              | Type   | Description                          |
+//! |----------------------------------|--------|--------------------------------------|
+//! | `Balance(user, token)`           | `i128` | Deposited balance for (user, token)  |
+//! | `VaultTotal(token)`              | `i128` | Sum of all deposits for a token      |
 
 #![no_std]
 
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env};
 
-// ── storage keys ──────────────────────────────────────────────────────────────
+// ─── Storage keys ─────────────────────────────────────────────────────────────
 
-/// Storage keys used by the vault.
+/// Storage keys for the multi-token vault.
 ///
-/// `Balance(depositor, token)` — per-user balance for a given token.
-/// `VaultTotal(token)`         — aggregate vault balance for a given token.
+/// Using a compound key `Balance(user, token)` lets us store one entry per
+/// (depositor, token) pair without a nested map abstraction.
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
-    /// Individual user balance: `(depositor_address, token_address)`.
+    /// Per-user, per-token deposited balance.
     Balance(Address, Address),
-    /// Sum of all user deposits for a single token.
+    /// Vault-wide total deposits for a given token.
     VaultTotal(Address),
 }
 
-// ── errors ────────────────────────────────────────────────────────────────────
+// ─── Errors ───────────────────────────────────────────────────────────────────
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    /// `amount` must be strictly positive.
+    /// Deposit or withdraw amount must be greater than zero.
     InvalidAmount = 1,
-    /// Requested withdrawal exceeds the depositor's current balance.
+    /// Withdrawal exceeds the caller's recorded balance for that token.
     InsufficientBalance = 2,
 }
 
-// ── contract ──────────────────────────────────────────────────────────────────
+// ─── Contract ─────────────────────────────────────────────────────────────────
 
 #[contract]
 pub struct MultiTokenVault;
 
 #[contractimpl]
 impl MultiTokenVault {
-    // ── write operations ───────────────────────────────────────────────────
+    // ── Mutating operations ───────────────────────────────────────────────────
 
-    /// Deposit `amount` of `token` into the vault on behalf of `depositor`.
+    /// Record a deposit of `amount` units of `token` from `depositor`.
     ///
-    /// Requires authorization from `depositor`.
+    /// # Arguments
+    /// * `depositor` – Address making the deposit; must authorise this call.
+    /// * `token`     – Address of the token being deposited.
+    /// * `amount`    – Number of token units to deposit (must be > 0).
     ///
     /// # Errors
-    ///
-    /// Returns [`Error::InvalidAmount`] when `amount ≤ 0`.
-    pub fn deposit(env: Env, depositor: Address, token: Address, amount: i128) -> Result<(), Error> {
-        if amount <= 0 {
-            return Err(Error::InvalidAmount);
-        }
-        depositor.require_auth();
-
-        // Update per-user balance
-        let balance_key = DataKey::Balance(depositor.clone(), token.clone());
-        let current_balance: i128 = env
-            .storage()
-            .persistent()
-            .get(&balance_key)
-            .unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&balance_key, &(current_balance + amount));
-
-        // Update vault total
-        let total_key = DataKey::VaultTotal(token.clone());
-        let current_total: i128 = env
-            .storage()
-            .persistent()
-            .get(&total_key)
-            .unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&total_key, &(current_total + amount));
-
-        Ok(())
-    }
-
-    /// Withdraw `amount` of `token` from the vault for `depositor`.
-    ///
-    /// Requires authorization from `depositor`.
-    ///
-    /// # Errors
-    ///
-    /// * [`Error::InvalidAmount`] — `amount ≤ 0`.
-    /// * [`Error::InsufficientBalance`] — `amount > depositor_balance`.
-    pub fn withdraw(
+    /// * [`Error::InvalidAmount`] — `amount` is zero or negative.
+    pub fn deposit(
         env: Env,
         depositor: Address,
         token: Address,
         amount: i128,
     ) -> Result<(), Error> {
+        depositor.require_auth();
+
         if amount <= 0 {
             return Err(Error::InvalidAmount);
         }
-        depositor.require_auth();
 
         let balance_key = DataKey::Balance(depositor.clone(), token.clone());
-        let current_balance: i128 = env
-            .storage()
-            .persistent()
-            .get(&balance_key)
-            .unwrap_or(0);
-
-        if amount > current_balance {
-            return Err(Error::InsufficientBalance);
-        }
-
-        // Update per-user balance
+        let current: i128 = env.storage().instance().get(&balance_key).unwrap_or(0_i128);
         env.storage()
-            .persistent()
-            .set(&balance_key, &(current_balance - amount));
+            .instance()
+            .set(&balance_key, &(current + amount));
 
-        // Update vault total
-        let total_key = DataKey::VaultTotal(token.clone());
-        let current_total: i128 = env
-            .storage()
-            .persistent()
-            .get(&total_key)
-            .unwrap_or(0);
+        let total_key = DataKey::VaultTotal(token);
+        let vault_total: i128 = env.storage().instance().get(&total_key).unwrap_or(0_i128);
         env.storage()
-            .persistent()
-            .set(&total_key, &(current_total - amount));
+            .instance()
+            .set(&total_key, &(vault_total + amount));
 
         Ok(())
     }
 
-    // ── read operations ────────────────────────────────────────────────────
+    /// Withdraw `amount` units of `token` from the caller's balance.
+    ///
+    /// # Arguments
+    /// * `withdrawer` – Address requesting the withdrawal; must authorise this call.
+    /// * `token`      – Address of the token to withdraw.
+    /// * `amount`     – Number of token units to withdraw (must be > 0).
+    ///
+    /// # Errors
+    /// * [`Error::InvalidAmount`]       — `amount` is zero or negative.
+    /// * [`Error::InsufficientBalance`] — caller's recorded balance is less than `amount`.
+    pub fn withdraw(
+        env: Env,
+        withdrawer: Address,
+        token: Address,
+        amount: i128,
+    ) -> Result<i128, Error> {
+        withdrawer.require_auth();
 
-    /// Return the total amount of `token` currently held in the vault across
-    /// all depositors.
-    pub fn vault_total(env: Env, token: Address) -> i128 {
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let balance_key = DataKey::Balance(withdrawer.clone(), token.clone());
+        let current: i128 = env.storage().instance().get(&balance_key).unwrap_or(0_i128);
+
+        if current < amount {
+            return Err(Error::InsufficientBalance);
+        }
+
+        // Update user balance before touching vault total (checks-effects).
+        let new_balance = current - amount;
+        env.storage().instance().set(&balance_key, &new_balance);
+
+        let total_key = DataKey::VaultTotal(token);
+        let vault_total: i128 = env.storage().instance().get(&total_key).unwrap_or(0_i128);
         env.storage()
-            .persistent()
-            .get(&DataKey::VaultTotal(token))
-            .unwrap_or(0)
+            .instance()
+            .set(&total_key, &(vault_total - amount));
+
+        Ok(amount)
     }
 
-    /// Return the `depositor`'s current balance for `token`.
-    pub fn balance(env: Env, depositor: Address, token: Address) -> i128 {
+    // ── View helpers ──────────────────────────────────────────────────────────
+
+    /// Return the deposited balance of `token` for `user`.
+    ///
+    /// Returns `0` if the user has never deposited that token.
+    pub fn balance(env: Env, user: Address, token: Address) -> i128 {
         env.storage()
-            .persistent()
-            .get(&DataKey::Balance(depositor, token))
-            .unwrap_or(0)
+            .instance()
+            .get(&DataKey::Balance(user, token))
+            .unwrap_or(0_i128)
+    }
+
+    /// Return the vault-wide total deposited balance for `token`.
+    ///
+    /// Returns `0` if no deposits have been recorded for that token.
+    pub fn vault_total(env: Env, token: Address) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::VaultTotal(token))
+            .unwrap_or(0_i128)
     }
 }
 
-// ── tests ─────────────────────────────────────────────────────────────────────
+// ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env};
+    use soroban_sdk::{testutils::Address as _, Address, Env};
 
-    /// Stand-in for a token address — just a random `Address`.
-    fn make_token(env: &Env) -> Address {
-        Address::generate(env)
-    }
+    // ── helpers ───────────────────────────────────────────────────────────────
 
-    /// Register the vault contract and return a ready-to-use client.
+    /// Boot a fresh environment with mocked auths and a registered vault contract.
     fn setup() -> (Env, MultiTokenVaultClient<'static>) {
         let env = Env::default();
         env.mock_all_auths();
@@ -188,215 +188,303 @@ mod tests {
         (env, client)
     }
 
-    // ── deposit ────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // deposit
+    // ─────────────────────────────────────────────────────────────────────────
 
     #[test]
-    fn test_deposit_increases_user_balance() {
+    fn test_deposit_records_balance() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
 
-        client.deposit(&alice, &token, &1000);
-        assert_eq!(client.balance(&alice, &token), 1000);
+        client.deposit(&user, &token, &1_000);
+
+        assert_eq!(client.balance(&user, &token), 1_000);
     }
 
     #[test]
-    fn test_deposit_increases_vault_total() {
+    fn test_deposit_accumulates_multiple_deposits_same_token() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
 
-        client.deposit(&alice, &token, &500);
-        assert_eq!(client.vault_total(&token), 500);
+        client.deposit(&user, &token, &500);
+        client.deposit(&user, &token, &300);
+
+        assert_eq!(client.balance(&user, &token), 800);
     }
 
     #[test]
-    fn test_multiple_depositors_accumulate_vault_total() {
+    fn test_deposit_tracks_different_tokens_independently() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let bob = Address::generate(&env);
-        let token = make_token(&env);
+        let user = Address::generate(&env);
+        let token_a = Address::generate(&env);
+        let token_b = Address::generate(&env);
 
-        client.deposit(&alice, &token, &600);
-        client.deposit(&bob, &token, &400);
+        client.deposit(&user, &token_a, &1_000);
+        client.deposit(&user, &token_b, &2_000);
 
-        assert_eq!(client.vault_total(&token), 1000);
-        assert_eq!(client.balance(&alice, &token), 600);
-        assert_eq!(client.balance(&bob, &token), 400);
+        assert_eq!(client.balance(&user, &token_a), 1_000);
+        assert_eq!(client.balance(&user, &token_b), 2_000);
     }
 
     #[test]
-    fn test_deposit_zero_is_rejected() {
+    fn test_deposit_tracks_different_users_same_token() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
+        let user_a = Address::generate(&env);
+        let user_b = Address::generate(&env);
+        let token = Address::generate(&env);
 
-        let result = client.try_deposit(&alice, &token, &0);
+        client.deposit(&user_a, &token, &400);
+        client.deposit(&user_b, &token, &600);
+
+        assert_eq!(client.balance(&user_a, &token), 400);
+        assert_eq!(client.balance(&user_b, &token), 600);
+    }
+
+    #[test]
+    fn test_deposit_updates_vault_total() {
+        let (env, client) = setup();
+        let user_a = Address::generate(&env);
+        let user_b = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        client.deposit(&user_a, &token, &700);
+        client.deposit(&user_b, &token, &300);
+
+        assert_eq!(client.vault_total(&token), 1_000);
+    }
+
+    #[test]
+    fn test_deposit_vault_total_independent_per_token() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let token_a = Address::generate(&env);
+        let token_b = Address::generate(&env);
+
+        client.deposit(&user, &token_a, &100);
+        client.deposit(&user, &token_b, &999);
+
+        assert_eq!(client.vault_total(&token_a), 100);
+        assert_eq!(client.vault_total(&token_b), 999);
+    }
+
+    #[test]
+    fn test_deposit_rejects_zero_amount() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        let result = client.try_deposit(&user, &token, &0);
         assert_eq!(result, Err(Ok(Error::InvalidAmount)));
     }
 
     #[test]
-    fn test_deposit_negative_is_rejected() {
+    fn test_deposit_rejects_negative_amount() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
 
-        let result = client.try_deposit(&alice, &token, &-1);
+        let result = client.try_deposit(&user, &token, &-1);
         assert_eq!(result, Err(Ok(Error::InvalidAmount)));
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // withdraw
+    // ─────────────────────────────────────────────────────────────────────────
+
     #[test]
-    fn test_different_tokens_are_tracked_independently() {
+    fn test_withdraw_full_balance() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token_a = make_token(&env);
-        let token_b = make_token(&env);
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
 
-        client.deposit(&alice, &token_a, &300);
-        client.deposit(&alice, &token_b, &700);
+        client.deposit(&user, &token, &1_000);
+        let released = client.withdraw(&user, &token, &1_000);
 
-        assert_eq!(client.balance(&alice, &token_a), 300);
-        assert_eq!(client.balance(&alice, &token_b), 700);
-        assert_eq!(client.vault_total(&token_a), 300);
-        assert_eq!(client.vault_total(&token_b), 700);
-    }
-
-    // ── withdraw ───────────────────────────────────────────────────────────
-
-    /// **Core rule**: A withdraw above the user's balance must fail with
-    /// `Error::InsufficientBalance` (contract error, not a panic).
-    #[test]
-    fn test_withdraw_above_balance_fails_with_contract_error() {
-        let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
-
-        // Alice has 200 tokens in the vault.
-        client.deposit(&alice, &token, &200);
-
-        // Attempt to withdraw 201 — must return a contract error, not panic.
-        let result = client.try_withdraw(&alice, &token, &201);
-        assert_eq!(result, Err(Ok(Error::InsufficientBalance)));
-
-        // State must be unchanged after the failed withdrawal.
-        assert_eq!(client.balance(&alice, &token), 200);
-        assert_eq!(client.vault_total(&token), 200);
-    }
-
-    /// **Core rule**: A valid withdraw decreases `vault_total` by exactly the
-    /// withdrawn amount.
-    #[test]
-    fn test_valid_withdraw_decreases_vault_total() {
-        let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
-
-        client.deposit(&alice, &token, &1000);
-        assert_eq!(client.vault_total(&token), 1000);
-
-        client.withdraw(&alice, &token, &350);
-
-        // vault_total must decrease by exactly 350.
-        assert_eq!(client.vault_total(&token), 650);
-        // User balance must also decrease by exactly 350.
-        assert_eq!(client.balance(&alice, &token), 650);
+        assert_eq!(released, 1_000);
+        assert_eq!(client.balance(&user, &token), 0);
     }
 
     #[test]
-    fn test_full_withdraw_empties_vault_total() {
+    fn test_withdraw_partial_balance() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
 
-        client.deposit(&alice, &token, &500);
-        client.withdraw(&alice, &token, &500);
+        client.deposit(&user, &token, &1_000);
+        let released = client.withdraw(&user, &token, &400);
 
-        assert_eq!(client.vault_total(&token), 0);
-        assert_eq!(client.balance(&alice, &token), 0);
+        assert_eq!(released, 400);
+        assert_eq!(client.balance(&user, &token), 600);
     }
 
     #[test]
-    fn test_withdraw_from_empty_balance_fails_with_contract_error() {
+    fn test_withdraw_decrements_vault_total() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
 
-        // Alice has never deposited — balance is 0.
-        let result = client.try_withdraw(&alice, &token, &1);
-        assert_eq!(result, Err(Ok(Error::InsufficientBalance)));
+        client.deposit(&user, &token, &1_000);
+        client.withdraw(&user, &token, &250);
+
+        assert_eq!(client.vault_total(&token), 750);
     }
 
-    #[test]
-    fn test_withdraw_zero_is_rejected() {
-        let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
-
-        client.deposit(&alice, &token, &100);
-        let result = client.try_withdraw(&alice, &token, &0);
-        assert_eq!(result, Err(Ok(Error::InvalidAmount)));
-    }
-
-    #[test]
-    fn test_withdraw_negative_is_rejected() {
-        let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token = make_token(&env);
-
-        client.deposit(&alice, &token, &100);
-        let result = client.try_withdraw(&alice, &token, &-50);
-        assert_eq!(result, Err(Ok(Error::InvalidAmount)));
-    }
-
-    /// Vault totals for different tokens must not interfere: withdrawing token A
-    /// must not affect `vault_total` for token B.
     #[test]
     fn test_withdraw_does_not_affect_other_tokens() {
         let (env, client) = setup();
-        let alice = Address::generate(&env);
-        let token_a = make_token(&env);
-        let token_b = make_token(&env);
+        let user = Address::generate(&env);
+        let token_a = Address::generate(&env);
+        let token_b = Address::generate(&env);
 
-        client.deposit(&alice, &token_a, &400);
-        client.deposit(&alice, &token_b, &600);
+        client.deposit(&user, &token_a, &500);
+        client.deposit(&user, &token_b, &800);
+        client.withdraw(&user, &token_a, &200);
 
-        client.withdraw(&alice, &token_a, &100);
-
-        // token_a total drops by 100.
-        assert_eq!(client.vault_total(&token_a), 300);
-        // token_b total is completely unaffected.
-        assert_eq!(client.vault_total(&token_b), 600);
+        assert_eq!(client.balance(&user, &token_a), 300);
+        assert_eq!(client.balance(&user, &token_b), 800);
     }
 
-    /// When two users hold the same token, withdrawing one user's share must
-    /// decrease `vault_total` without touching the other user's balance.
     #[test]
-    fn test_withdraw_only_affects_correct_user_balance() {
+    fn test_withdraw_does_not_affect_other_users() {
+        let (env, client) = setup();
+        let user_a = Address::generate(&env);
+        let user_b = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        client.deposit(&user_a, &token, &500);
+        client.deposit(&user_b, &token, &700);
+        client.withdraw(&user_a, &token, &500);
+
+        assert_eq!(client.balance(&user_a, &token), 0);
+        assert_eq!(client.balance(&user_b, &token), 700);
+    }
+
+    #[test]
+    fn test_withdraw_rejects_zero_amount() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        client.deposit(&user, &token, &100);
+        let result = client.try_withdraw(&user, &token, &0);
+        assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+    }
+
+    #[test]
+    fn test_withdraw_rejects_negative_amount() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        client.deposit(&user, &token, &100);
+        let result = client.try_withdraw(&user, &token, &-50);
+        assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+    }
+
+    #[test]
+    fn test_withdraw_rejects_overdraft() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        client.deposit(&user, &token, &100);
+        let result = client.try_withdraw(&user, &token, &101);
+        assert_eq!(result, Err(Ok(Error::InsufficientBalance)));
+    }
+
+    #[test]
+    fn test_withdraw_rejects_with_no_prior_deposit() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        let result = client.try_withdraw(&user, &token, &1);
+        assert_eq!(result, Err(Ok(Error::InsufficientBalance)));
+    }
+
+    #[test]
+    fn test_withdraw_after_full_withdrawal_rejects_second_attempt() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        client.deposit(&user, &token, &50);
+        client.withdraw(&user, &token, &50);
+
+        let result = client.try_withdraw(&user, &token, &1);
+        assert_eq!(result, Err(Ok(Error::InsufficientBalance)));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // balance / vault_total view helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_balance_returns_zero_for_unknown_user() {
+        let (env, client) = setup();
+        let user = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        assert_eq!(client.balance(&user, &token), 0);
+    }
+
+    #[test]
+    fn test_vault_total_returns_zero_for_unknown_token() {
+        let (env, client) = setup();
+        let token = Address::generate(&env);
+
+        assert_eq!(client.vault_total(&token), 0);
+    }
+
+    #[test]
+    fn test_vault_total_stays_consistent_across_deposits_and_withdrawals() {
+        let (env, client) = setup();
+        let user_a = Address::generate(&env);
+        let user_b = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        client.deposit(&user_a, &token, &1_000);
+        client.deposit(&user_b, &token, &500);
+        client.withdraw(&user_a, &token, &200);
+        client.withdraw(&user_b, &token, &100);
+
+        // total = 1000 + 500 - 200 - 100 = 1200
+        assert_eq!(client.vault_total(&token), 1_200);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // multi-token scenarios
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_multiple_users_multiple_tokens() {
         let (env, client) = setup();
         let alice = Address::generate(&env);
         let bob = Address::generate(&env);
-        let token = make_token(&env);
+        let token_xlm = Address::generate(&env);
+        let token_usdc = Address::generate(&env);
 
-        client.deposit(&alice, &token, &700);
-        client.deposit(&bob, &token, &300);
-        assert_eq!(client.vault_total(&token), 1000);
+        // Alice deposits both tokens
+        client.deposit(&alice, &token_xlm, &2_000);
+        client.deposit(&alice, &token_usdc, &500);
 
-        client.withdraw(&alice, &token, &200);
+        // Bob deposits only XLM
+        client.deposit(&bob, &token_xlm, &1_500);
 
-        // vault_total decreases by 200.
-        assert_eq!(client.vault_total(&token), 800);
-        // Alice's balance decreases by 200.
-        assert_eq!(client.balance(&alice, &token), 500);
-        // Bob's balance is unchanged.
-        assert_eq!(client.balance(&bob, &token), 300);
-    }
+        // Alice partially withdraws USDC
+        client.withdraw(&alice, &token_usdc, &200);
 
-    // ── vault_total view ───────────────────────────────────────────────────
+        // Verify isolated balances
+        assert_eq!(client.balance(&alice, &token_xlm), 2_000);
+        assert_eq!(client.balance(&alice, &token_usdc), 300);
+        assert_eq!(client.balance(&bob, &token_xlm), 1_500);
+        assert_eq!(client.balance(&bob, &token_usdc), 0);
 
-    #[test]
-    fn test_vault_total_starts_at_zero() {
-        let (env, client) = setup();
-        let token = make_token(&env);
-        assert_eq!(client.vault_total(&token), 0);
+        // Verify vault totals
+        assert_eq!(client.vault_total(&token_xlm), 3_500);
+        assert_eq!(client.vault_total(&token_usdc), 300);
     }
 }

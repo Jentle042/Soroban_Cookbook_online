@@ -1,0 +1,52 @@
+---
+sidebar_position: 4
+title: Alerts
+description: Alert components for important messages
+---
+
+import { Alert } from '@site/src/components/Alert';
+
+Display important messages with visual emphasis using the Alert component.
+
+## Examples
+
+### All Variants
+
+<Alert variant="info">This is an informational alert with helpful context.</Alert>
+
+<Alert variant="warning">This is a warning alert about potential issues.</Alert>
+
+<Alert variant="error">This is an error alert for critical issues.</Alert>
+
+<Alert variant="success">This is a success alert for positive outcomes.</Alert>
+
+### With Titles
+
+<Alert variant="info" title="Quick Tip">
+  Use persistent storage for data that needs to outlive the contract execution.
+</Alert>
+
+<Alert variant="warning" title="Important">
+  Always validate input parameters before processing them.
+</Alert>
+
+### Inline Usage
+
+You can use alerts inline: <Alert variant="info" display="inline">like this</Alert> within your text.
+
+## Usage
+
+```tsx
+import { Alert } from '@site/src/components/Alert';
+
+<Alert variant="info">Your message here</Alert>
+<Alert variant="warning" title="Warning">Important notice</Alert>
+<Alert variant="error" icon={false}>Error without icon</Alert>
+```
+
+---
+
+## Related links
+
+- [Alerts & Callouts design tokens](/docs/design-system/alerts-callouts) — visual spec and variants
+- [Alert & Callout Showcase](/docs/components/alert-callout-showcase) — interactive examples

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #![no_std]
 
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env};
@@ -77,7 +78,9 @@ impl TokenWrapper {
         let to_balance = Self::get_balance(&env, &to_key);
         let treasury_balance = Self::get_balance(&env, &treasury_key);
 
-        env.storage().persistent().set(&from_key, &(from_balance - amount));
+        env.storage()
+            .persistent()
+            .set(&from_key, &(from_balance - amount));
         env.storage().persistent().set(&to_key, &(to_balance + net));
         env.storage()
             .persistent()

@@ -44,15 +44,16 @@ Copy the template below and replace `<your-example>` with your directory name:
 name = "<your-example>"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+soroban-sdk = { version = "27.0.3", features = ["testutils"] }
 
 [dev-dependencies]
-soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+soroban-sdk = { version = "27.0.3", features = ["testutils"] }
 
 [profile.release]
 opt-level = "z"
@@ -70,6 +71,7 @@ lto = true
 Include the contract implementation **and** a `#[cfg(test)]` module with at least one test per public function. Use `env.mock_all_auths()` when your functions call `require_auth`.
 
 ```rust
+// SPDX-License-Identifier: MIT
 #![no_std]
 use soroban_sdk::{contract, contractimpl, Env};
 
@@ -125,24 +127,136 @@ resolver = "2"
 
 Both commands print a clear pass/fail result for each crate.
 
-### 6. Link to the docs
+### 6. Write `README.md`
+
+Every example crate needs a README — for many readers, browsing `examples/` on
+GitHub *is* how they consume the cookbook. Use this template:
+
+````markdown
+# <Example Title>
+
+<One or two sentences: what the contract does and why someone would reach for it.>
+
+## What it demonstrates
+
+- <Technique or guarantee 1>
+- <Technique or guarantee 2>
+- <Technique or guarantee 3>
+
+## Origin
+
+<Choose and complete one statement before submitting:>
+
+- Original work contributed to Soroban Cookbook.
+- Adapted from [<source/project name>](<public source URL>), revision/version
+  <commit or release>, licensed under <SPDX identifier>. Changes: <summary>.
+  Required upstream notices: <file paths or retained source headers>.
+
+## Build
+
+```bash
+stellar contract build --manifest-path examples/<your-example>/Cargo.toml
+```
+
+The optimised Wasm is written to
+`examples/target/wasm32-unknown-unknown/release/<your_example>.wasm`.
+
+## Test
+
+```bash
+# From the repository root — the same command CI runs
+./scripts/test-examples.sh <your-example>
+
+# Or invoke cargo directly
+cargo test --manifest-path examples/<your-example>/Cargo.toml
+```
+
+## Deploy to testnet
+
+```bash
+stellar contract deploy \
+  --wasm examples/target/wasm32-unknown-unknown/release/<your_example>.wasm \
+  --source my-testnet-account \
+  --network testnet
+```
+
+See [Deploy to Testnet](https://soroban-cookbook.dev/docs/getting-started/deploy-testnet) for account setup and funding.
+
+## Related documentation
+
+- [<Pattern Page>](https://soroban-cookbook.dev/docs/patterns/<pattern-page>) — the pattern page this example supports
+- [Pattern Library](https://soroban-cookbook.dev/docs/patterns/overview) — every documented pattern
+- [Adding a Tested Example](https://soroban-cookbook.dev/docs/contributing/add-tested-example) — how these crates are structured
+````
+
+Notes:
+
+- The crate name in the Wasm filename uses underscores, the directory uses hyphens.
+- Examples build into the **shared workspace** target directory, `examples/target/`,
+  not a per-crate one.
+- If the example needs a companion Wasm built first (as `upgradeable` and
+  `contract-factory` do), add an **Additional build step** section under Build
+  that matches what `scripts/test-examples.sh` does.
+
+### 7. Add it to the examples index
+
+Add a row for your crate to the table in [`examples/README.md`](https://github.com/Soroban-Cookbook/Soroban_Cookbook_online/blob/main/examples/README.md)
+so it is discoverable from the directory listing.
+
+Also add a row to [`examples/ORIGIN.md`](https://github.com/Soroban-Cookbook/Soroban_Cookbook_online/blob/main/examples/ORIGIN.md)
+recording whether the crate is `original` or `adapted` from a named public
+source. The file documents the required columns.
+
+### 8. Link to the docs
 
 In your documentation page (`.md` or `.mdx`), reference the example naturally in code fences. The tested source in `examples/` is the source of truth; keep the two in sync.
 
+Pattern and security pages that ship contract code must also carry the shared unaudited notice. See the [Unaudited Example Notice Policy](./unaudited-example-notice.md) for when it is required and where to place it.
+
 ## CI integration
 
-The `test-examples` job in `.github/workflows/ci.yml` runs `./scripts/test-examples.sh` on every pull request and push to `main`. A failing example blocks the PR from merging.
+The `test-examples` job in `.github/workflows/ci.yml` runs `./scripts/test-examples.sh` on every pull request and push to `main`, and reports which examples failed.
 
 If your PR introduces a new example, CI will automatically pick it up because the script discovers every sub-directory in `examples/` that contains a `Cargo.toml`.
 
+The same job also runs `scripts/check-example-readmes.sh`, which fails if any crate with a `Cargo.toml` has no `README.md`. Both steps are advisory (`continue-on-error`), so they report gaps without blocking the merge.
+
+## Example origin checklist
+
+Complete this checklist for every new or updated example before merge. Record
+provenance in `examples/<your-example>/README.md` under **Origin**; use the
+template above, removing the unused option and filling in every placeholder.
+
+- [ ] The crate's `Cargo.toml` declares a `license` SPDX expression (normally
+  `MIT` for original project examples); it accurately covers the contributed code.
+- [ ] New or modified Rust source files have accurate `SPDX-License-Identifier`
+  headers (for example `// SPDX-License-Identifier: MIT` for original MIT code).
+- [ ] The README explicitly states whether the example is original or adapted.
+- [ ] For adaptations, the README names and links each public source, records its
+  revision or version and license, and summarizes the changes made.
+- [ ] Required upstream copyright, attribution, license text, and NOTICE files
+  are preserved in the crate as required by the source license. Do not relabel
+  third-party code as MIT without permission; resolve compatibility questions
+  with maintainers before merge.
+
+Link the crate's Origin section in the PR so reviewers can verify it. This
+process documents incoming contributions and makes no claim about the origin of
+existing examples.
+
 ## Checklist before submitting
 
+- [ ] The [example origin checklist](#example-origin-checklist) is complete
 - [ ] `examples/<your-example>/Cargo.toml` exists and lists `soroban-sdk` as a dependency
 - [ ] `examples/<your-example>/src/lib.rs` compiles with `cargo build`
 - [ ] Every public function has at least one test in `#[cfg(test)]`
 - [ ] `cargo test --manifest-path examples/<your-example>/Cargo.toml` exits 0
 - [ ] `<your-example>` is listed in `examples/Cargo.toml`
 - [ ] The documentation page references the same code
+- [ ] The documentation page shows `<UnauditedExampleNotice />` per the [notice policy](./unaudited-example-notice.md)
+- [ ] `examples/<your-example>/README.md` exists and follows the template above
+- [ ] `examples/README.md` lists the new crate
+- [ ] `examples/ORIGIN.md` has a row for the new crate
+- [ ] `./scripts/check-example-readmes.sh` passes
 
 ## Troubleshooting
 
