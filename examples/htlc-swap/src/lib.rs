@@ -176,7 +176,7 @@ impl HtlcSwap {
 mod tests {
     use super::*;
     use soroban_sdk::{
-        testutils::{Address as _, Ledger, LedgerInfo},
+        testutils::{Address as _, Ledger},
         Bytes, Env,
     };
 
@@ -187,16 +187,9 @@ mod tests {
     }
 
     fn advance_time(env: &Env, timestamp: u64) {
-        env.ledger().set(LedgerInfo {
-            timestamp,
-            protocol_version: 27,
-            sequence_number: env.ledger().sequence(),
-            network_id: Default::default(),
-            base_reserve: 10,
-            min_temp_entry_ttl: 1,
-            min_persistent_entry_ttl: 1,
-            max_entry_ttl: 6_312_000,
-        });
+        // Preserve the host protocol version; constructing LedgerInfo by hand
+        // breaks when the soroban-sdk host requires a newer protocol.
+        env.ledger().set_timestamp(timestamp);
     }
 
     fn setup() -> (
@@ -321,6 +314,47 @@ mod tests {
 
         let result = client.try_refund(&alice, &swap_id);
         assert_eq!(result, Err(Ok(Error::SwapNotFound)));
+    }
+
+    #[test]
+    fn test_claim_and_refund_respect_the_timeout_boundary() {
+        let (env, alice, bob, token_a, token_b, client) = setup();
+
+        // claim succeeds one second before the timeout
+        let secret = Bytes::from_array(&env, &[0x0a, 0x0b, 0x0c, 0x0d]);
+        let hashlock: Bytes = env.crypto().sha256(&secret).into();
+        let claimable = client.create(
+            &alice, &bob, &token_a, &token_b, &100, &50, &hashlock, &2000,
+        );
+
+        advance_time(&env, 1999);
+        client.claim(&bob, &claimable, &secret);
+
+        let token_a_client = token::Client::new(&env, &token_a);
+        assert_eq!(token_a_client.balance(&bob), 100);
+
+        // refund is rejected before the timeout and succeeds at the boundary
+        let refund_secret = Bytes::from_array(&env, &[0x1a, 0x1b, 0x1c, 0x1d]);
+        let refund_hashlock: Bytes = env.crypto().sha256(&refund_secret).into();
+        let refundable = client.create(
+            &alice,
+            &bob,
+            &token_a,
+            &token_b,
+            &100,
+            &50,
+            &refund_hashlock,
+            &2000,
+        );
+
+        let early = client.try_refund(&alice, &refundable);
+        assert_eq!(early, Err(Ok(Error::TimelockNotExpired)));
+
+        advance_time(&env, 2000);
+        client.refund(&alice, &refundable);
+
+        assert_eq!(token_a_client.balance(&alice), 900);
+        assert_eq!(client.get_swap(&refundable), None);
     }
 
     #[test]
