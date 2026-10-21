@@ -5,7 +5,7 @@ description: How the Soroban Cookbook documentation site handles data, cookies, 
 
 # Privacy Policy
 
-**Last updated:** 15 October 2026
+**Last updated:** 21 October 2026
 
 This is the canonical privacy policy for the site. The docs legal privacy page
 links here so both entry points describe the same behaviour.
@@ -107,10 +107,14 @@ secrets or personal information into search or page content. The GA4 loader sets
 
 ### Newsletter submissions
 
-With a valid HTTPS `NEWSLETTER_ENDPOINT`, the form POSTs your trimmed email
-address as JSON with an `X-CSRF-Token` header. The backend controls subscription
-processing and retention. Without a valid endpoint the form displays a demo
-success message and sends no subscription request; it does not subscribe you.
+The newsletter form sends your trimmed email address only when the site has a
+valid HTTPS `NEWSLETTER_ENDPOINT` configured. It sends a JSON POST with an
+`X-CSRF-Token` header; the token is kept in browser session storage to help
+protect the request. The endpoint is configured by the site operator, and its
+backend operator is responsible for processing and retaining submitted email
+addresses. The project may not store the address directly. Without a valid
+endpoint, the form displays a demo success message but sends no request and
+does not subscribe you.
 
 ### Error monitoring
 
@@ -207,9 +211,9 @@ removes site cookies; it does not erase data already held by providers.
 ### Newsletter / deletion requests
 
 To request deletion of an email used for the newsletter, contact the maintainers
-via GitHub or Discord (see placeholder contact above) to arrange a private
-channel for the email address used to subscribe. Do not post it in a public
-issue. <!-- PLACEHOLDER: Add a dedicated privacy email when available. -->
+via a GitHub issue or discussion, or via the project Discord listed on the
+site, to arrange a private channel for the email address used to subscribe. Do
+not post it in a public issue. <!-- PLACEHOLDER: Add a dedicated privacy email when available. -->
 
 ## Children
 

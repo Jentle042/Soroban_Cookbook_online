@@ -4,7 +4,7 @@ title: Privacy Policy
 hide_table_of_contents: true
 ---
 
-**Last updated:** 15 October 2026
+**Last updated:** 21 October 2026
 
 The [canonical Privacy Policy](/privacy) describes how the Soroban Cookbook site
 handles information, optional analytics, newsletter submissions, browser storage,
@@ -12,8 +12,9 @@ and privacy requests.
 
 Please read that policy for the current disclosures about Google Analytics 4,
 optional Microsoft Clarity heatmaps/session replay, consent controls, and
-retention. This docs entry points to the same policy used by the site's footer
-and consent banner so there is one maintained source for these details.
+retention. This docs entry points to the policy used by the site's footer and
+consent banner. The newsletter summary below is repeated here for readers of
+this page; the canonical policy remains the full policy source.
 
 ## Withdraw or change consent
 
@@ -56,3 +57,20 @@ Retention and contact details follow the operator's Sentry project settings.
 <!-- PLACEHOLDER: State the operator's Sentry data-retention period and the privacy contact for Sentry-related requests once known. -->
 See the [canonical Privacy Policy](/privacy) (Error monitoring, Third-party
 services, and Data retention rows) for the maintained disclosure.
+
+## Newsletter submissions
+
+The newsletter form sends your trimmed email address only when the site has a
+valid HTTPS `NEWSLETTER_ENDPOINT` configured. It sends a JSON POST with an
+`X-CSRF-Token` header; the token is kept in browser session storage to help
+protect the request. The endpoint is configured by the site operator, and its
+backend operator is responsible for processing and retaining submitted email
+addresses. The project may not store the address directly. Without a valid
+endpoint, the form displays a demo success message but sends no request and
+does not subscribe you.
+
+To request deletion of an email used for the newsletter, contact the
+maintainers via a GitHub issue or discussion, or via the project Discord listed
+on the site, to arrange a private channel for the email address used to
+subscribe. Do not post it in a public issue. <!-- PLACEHOLDER: Add a dedicated privacy email when available. -->
+<!-- PLACEHOLDER: State the configured newsletter backend's retention period when known. -->
