@@ -156,16 +156,15 @@ mod tests {
 
         // Baseline: do_work succeeds while unpaused.
         assert_eq!(client.do_work(), 1);
-        assert_eq!(client.get_op_count(), 1);
 
-        // Pause, then do_work must fail with a structured contract error
-        // (not a panic), and must not mutate state.
+        // Pause: do_work must return a contract error, not panic.
         client.pause();
         assert!(client.is_paused());
         assert_eq!(client.try_do_work(), Err(Ok(Error::ContractPaused)));
+        // Rejected call must not mutate state.
         assert_eq!(client.get_op_count(), 1);
 
-        // Authorized unpause restores do_work.
+        // Unpause: do_work succeeds again and continues counting.
         client.unpause();
         assert!(!client.is_paused());
         assert_eq!(client.do_work(), 2);
