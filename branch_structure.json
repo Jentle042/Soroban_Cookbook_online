@@ -1,0 +1,18 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "fix/issue-1309-cover-buy-behavior-in-examples-marketplace",
+    "main",
+    "origin"
+  ],
+  "parent": {
+    "fix/issue-1309-cover-buy-behavior-in-examples-marketplace": "main",
+    "main": null,
+    "origin": "main"
+  },
+  "order": [
+    "main",
+    "fix/issue-1309-cover-buy-behavior-in-examples-marketplace",
+    "origin"
+  ]
+}
