@@ -1,0 +1,21 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "fix/issue-1311-cover-execute-behavior-in-examples-multisig",
+    "fix/issue-1316-cover-get-price-checked-behavior-in-examples",
+    "main",
+    "origin"
+  ],
+  "parent": {
+    "fix/issue-1311-cover-execute-behavior-in-examples-multisig": "main",
+    "fix/issue-1316-cover-get-price-checked-behavior-in-examples": "main",
+    "main": null,
+    "origin": "main"
+  },
+  "order": [
+    "main",
+    "fix/issue-1311-cover-execute-behavior-in-examples-multisig",
+    "fix/issue-1316-cover-get-price-checked-behavior-in-examples",
+    "origin"
+  ]
+}
