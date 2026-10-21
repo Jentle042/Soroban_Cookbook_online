@@ -151,6 +151,28 @@ mod tests {
     }
 
     #[test]
+    fn test_do_work_fails_while_paused_and_succeeds_after_unpause() {
+        let (_, _, client) = setup();
+
+        // Baseline: do_work succeeds while unpaused.
+        assert_eq!(client.do_work(), 1);
+        assert_eq!(client.get_op_count(), 1);
+
+        // Pause, then do_work must fail with a structured contract error
+        // (not a panic), and must not mutate state.
+        client.pause();
+        assert!(client.is_paused());
+        assert_eq!(client.try_do_work(), Err(Ok(Error::ContractPaused)));
+        assert_eq!(client.get_op_count(), 1);
+
+        // Authorized unpause restores do_work.
+        client.unpause();
+        assert!(!client.is_paused());
+        assert_eq!(client.do_work(), 2);
+        assert_eq!(client.get_op_count(), 2);
+    }
+
+    #[test]
     fn test_pause_requires_admin_auth() {
         let (env, admin, client) = setup();
         client.pause();
