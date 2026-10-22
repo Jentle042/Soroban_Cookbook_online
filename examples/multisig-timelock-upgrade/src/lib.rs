@@ -1,3 +1,210 @@
 // SPDX-License-Identifier: MIT
 
-contract; use std::auth::msg_sender; use std::block::timestamp; use std::revert::require; // Multisig + timelock governor for upgradeable proxy contracts. abi MultiSigTimeLockUpgrade { fn init(Vec<Identity>, u64, u64, ContractId); fn propose_upgrade(ContractId); fn approve_upgrade(); fn execute_upgrade(); } abi UpgradeableProxy { fn upgrade(ContractId); } struct UpgradeProposal { target: ContractId, proposed_at: u64 } storage { initialized: bool = false, owners: StorageVec<Identity> = StorageVec::new(), required_signatures: u64 = 0, delay: u64 = 0, proxy: Option<ContractId> = Option::None, pending: Option<UpgradeProposal> = Option::None, approvals: u64 = 0, approved: StorageMap<Identity, u64> = StorageMap::new() } fn is_owner(sender: Identity) -> bool { let len = storage.owners.len(); let mut i = 0; while i < len { if storage.owners.get(i).unwrap() == sender { return true; } i += 1; } false } impl MultiSigTimeLockUpgrade for Contract { fn init(owners: Vec<Identity>, required_signatures: u64, delay: u64, proxy: ContractId) { require(!storage.initialized, "Already initialized"); let mut i = 0; while i < owners.len() { storage.owners.push(owners.get(i).unwrap()); i += 1; } storage.required_signatures = required_signatures; storage.delay = delay; storage.proxy = Option::Some(proxy); storage.initialized = true; } fn propose_upgrade(target: ContractId) { let sender = msg_sender().unwrap(); require(is_owner(sender), "Not an owner"); require(storage.pending.is_none(), "Pending upgrade exists"); storage.pending = Option::Some(UpgradeProposal { target, proposed_at: timestamp() }); storage.approvals = 0; } fn approve_upgrade() { let sender = msg_sender().unwrap(); require(is_owner(sender), "Not an owner"); require(storage.pending.is_some(), "No pending upgrade"); let proposal = storage.pending.unwrap(); require(storage.approved.get(sender) != Option::Some(proposal.proposed_at), "Already approved"); storage.approved.insert(sender, proposal.proposed_at); storage.approvals = storage.approvals + 1; } fn execute_upgrade() { require(storage.pending.is_some(), "No pending upgrade"); let proposal = storage.pending.unwrap(); require(storage.approvals >= storage.required_signatures, "Below threshold"); require(timestamp() - proposal.proposed_at >= storage.delay, "Too early"); let proxy = storage.proxy.unwrap(); abi::UpgradeableProxy(proxy).upgrade(proposal.target); storage.pending = Option::None; } } [test(should_revert)] fn below_threshold_panics() { let owner = Identity::from(ContractId::this()); let owners = vec[!owner, owner]; let target = ContractId::from(0x000000000000000000000000000000000000000000000000000000000000001); let proxy = ContractId::from(0x000000000000000000000000000000000000000000000000000000000000002); let contract = abi::MultiSigTimeLockUpgrade(ContractId::this()); contract.init(owners, 2, 10, proxy); contract.propose_upgrade(target); contract.approve_upgrade(); contract.execute_upgrade(); } [test(should_revert)] fn too_early_panics() { let owner = Identity::from(ContractId::this()); let owners = vec[!owner]; let target = ContractId::from(0x0000000000000000000000000000000000000000000000000000000000000001); let proxy = ContractId::from(0x000000000000000000000000000000000000000000000000000000000000002); let contract = abi::MultiSigTimeLockUpgrade(ContractId::this()); contract.init(owners, 1, 100, proxy); contract.propose_upgrade(target); contract.approve_upgrade(); contract.execute_upgrade(); }
+#![no_std]
+
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
+    Symbol, Vec,
+};
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    AlreadyInitialized = 1,
+    NotAuthorized = 2,
+    InvalidThreshold = 3,
+    NoPendingUpgrade = 4,
+    PendingUpgradeExists = 5,
+    AlreadyApproved = 6,
+    BelowThreshold = 7,
+    TooEarly = 8,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpgradeProposal {
+    pub new_wasm_hash: BytesN<32>,
+    pub proposed_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub enum DataKey {
+    Initialized,
+    Owners,
+    Threshold,
+    Delay,
+    Pending,
+    Approvals,
+}
+
+const EVENT_UPGRADE: Symbol = symbol_short!("upgrade");
+
+#[contract]
+pub struct MultisigTimelockUpgrade;
+
+#[contractimpl]
+impl MultisigTimelockUpgrade {
+    pub fn init(
+        env: Env,
+        owners: Vec<Address>,
+        required_signatures: u32,
+        delay: u64,
+    ) -> Result<(), Error> {
+        if env.storage().instance().has(&DataKey::Initialized) {
+            return Err(Error::AlreadyInitialized);
+        }
+        if required_signatures == 0 || required_signatures > owners.len() {
+            return Err(Error::InvalidThreshold);
+        }
+
+        env.storage().instance().set(&DataKey::Initialized, &true);
+        env.storage().instance().set(&DataKey::Owners, &owners);
+        env.storage()
+            .instance()
+            .set(&DataKey::Threshold, &required_signatures);
+        env.storage().instance().set(&DataKey::Delay, &delay);
+
+        Ok(())
+    }
+
+    pub fn schedule(
+        env: Env,
+        proposer: Address,
+        new_wasm_hash: BytesN<32>,
+    ) -> Result<(), Error> {
+        proposer.require_auth();
+
+        let owners: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Owners)
+            .ok_or(Error::NotAuthorized)?;
+        if !owners.contains(&proposer) {
+            return Err(Error::NotAuthorized);
+        }
+
+        if env.storage().instance().has(&DataKey::Pending) {
+            return Err(Error::PendingUpgradeExists);
+        }
+
+        let now = env.ledger().timestamp();
+        let proposal = UpgradeProposal {
+            new_wasm_hash,
+            proposed_at: now,
+        };
+
+        let mut approvals = Vec::new(&env);
+        approvals.push_back(proposer);
+
+        env.storage().instance().set(&DataKey::Pending, &proposal);
+        env.storage().instance().set(&DataKey::Approvals, &approvals);
+
+        Ok(())
+    }
+
+    pub fn approve(env: Env, signer: Address) -> Result<(), Error> {
+        signer.require_auth();
+
+        let owners: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Owners)
+            .ok_or(Error::NotAuthorized)?;
+        if !owners.contains(&signer) {
+            return Err(Error::NotAuthorized);
+        }
+
+        if !env.storage().instance().has(&DataKey::Pending) {
+            return Err(Error::NoPendingUpgrade);
+        }
+
+        let mut approvals: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Approvals)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        if approvals.contains(&signer) {
+            return Err(Error::AlreadyApproved);
+        }
+
+        approvals.push_back(signer);
+        env.storage().instance().set(&DataKey::Approvals, &approvals);
+
+        Ok(())
+    }
+
+    pub fn execute(env: Env) -> Result<(), Error> {
+        let proposal: UpgradeProposal = env
+            .storage()
+            .instance()
+            .get(&DataKey::Pending)
+            .ok_or(Error::NoPendingUpgrade)?;
+
+        let threshold: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Threshold)
+            .ok_or(Error::NotAuthorized)?;
+
+        let delay: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::Delay)
+            .ok_or(Error::NotAuthorized)?;
+
+        let approvals: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Approvals)
+            .unwrap_or_else(|| Vec::new(&env));
+
+        if approvals.len() < threshold {
+            return Err(Error::BelowThreshold);
+        }
+
+        let now = env.ledger().timestamp();
+        if now < proposal.proposed_at.saturating_add(delay) {
+            return Err(Error::TooEarly);
+        }
+
+        env.storage().instance().remove(&DataKey::Pending);
+        env.storage().instance().remove(&DataKey::Approvals);
+
+        env.deployer().update_current_contract_wasm(proposal.new_wasm_hash.clone());
+
+        env.events()
+            .publish((EVENT_UPGRADE,), proposal.new_wasm_hash);
+
+        Ok(())
+    }
+
+    // View helpers
+    pub fn get_proposal(env: Env) -> Option<UpgradeProposal> {
+        env.storage().instance().get(&DataKey::Pending)
+    }
+
+    pub fn get_approvals(env: Env) -> Vec<Address> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Approvals)
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
+    pub fn get_owners(env: Env) -> Option<Vec<Address>> {
+        env.storage().instance().get(&DataKey::Owners)
+    }
+
+    pub fn get_threshold(env: Env) -> Option<u32> {
+        env.storage().instance().get(&DataKey::Threshold)
+    }
+
+    pub fn get_delay(env: Env) -> Option<u64> {
+        env.storage().instance().get(&DataKey::Delay)
+    }
+}
+
+#[cfg(test)]
+mod test;

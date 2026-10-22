@@ -47,10 +47,18 @@ describe('FeatureCard', () => {
   };
 
   it('renders title, description and icon', () => {
-    render(<FeatureCard {...defaultProps} />);
+    const { container } = render(<FeatureCard {...defaultProps} />);
     expect(screen.getByText('Fast Performance')).toBeInTheDocument();
     expect(screen.getByText('Optimized rendering')).toBeInTheDocument();
     expect(screen.getByText('⚡')).toBeInTheDocument();
+    expect(container.firstElementChild?.tagName).toBe('DIV');
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('renders as a div when href is empty', () => {
+    const { container } = render(<FeatureCard {...defaultProps} href="" />);
+    expect(container.firstElementChild?.tagName).toBe('DIV');
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('renders as a link when href is provided', () => {

@@ -1,21 +1,18 @@
 {
   "default_branch": "main",
   "branches": [
-    "fix/issue-1299-cover-do-work-behavior-in-examples-emergency",
-    "fix/issue-1322-cover-withdraw-behavior-in-examples-royalty",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in",
     "main",
     "origin"
   ],
   "parent": {
-    "fix/issue-1299-cover-do-work-behavior-in-examples-emergency": "main",
-    "fix/issue-1322-cover-withdraw-behavior-in-examples-royalty": "main",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in": "main",
     "main": null,
     "origin": "main"
   },
   "order": [
     "main",
-    "fix/issue-1299-cover-do-work-behavior-in-examples-emergency",
-    "fix/issue-1322-cover-withdraw-behavior-in-examples-royalty",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in",
     "origin"
   ]
 }

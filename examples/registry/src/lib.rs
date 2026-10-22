@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 
-//! Contract registry / name service.
-//!
-//! A minimal registry that maps stable byte names to contract addresses.
-//! Only an authorized administrator can update entries. Clients can resolve
-//! a name to a contract address using `get`.
-//!
-//! This pattern is useful alongside a contract factory: the factory
-//! deploys new contract instances, and the registry provides a stable
-//! name-to-address mapping so clients do not need to track raw contract
-//! addresses.
+/// Contract registry / name service.
+///
+/// A minimal registry that maps stable byte names to contract addresses.
+/// Only an authorized administrator can update entries. Clients can resolve
+/// a name to a contract address using `get`.
+///
+/// This pattern is useful alongside a contract factory: the factory
+/// deploys new contract instances, and the registry provides a stable
+/// name-to-address mapping so clients do not need to track raw contract
+/// addresses.
 
 #![no_std]
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Bytes, Env};
+use soroban_sdk:{contract, contracterror, contractimpl, contracttype, Address, Bytes, Env};
 
 #[contracttype]
 #[derive(Clone)]
@@ -46,7 +46,7 @@ impl Registry {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
-        Ok(())
+        Ok(()
     }
 
     /// Map a name to a contract address.
@@ -86,7 +86,7 @@ impl Registry {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super:*;
     use soroban_sdk::{testutils::Address as _, Env};
 
     struct Fixture {
@@ -121,24 +121,34 @@ mod tests {
         fixture.client.initialize(&fixture.admin);
     }
 
+    fn set_auths(fixture: &Fixture, address: &Address) {
+        fixture.env.mock_auths(false);
+        fixture.env.mock_auth(
+            &fixture.client.address,
+            &address,
+            &soroban_sdk::Symbol::new(&fixture.env, "set"),
+            (),
+        );
+    }
+
     #[test]
     fn initialize_sets_admin() {
         let fixture = setup();
         initialize(&fixture);
-        assert_eq!(fixture.client.admin(), Some(fixture.admin.clone()));
+        assert_eq(fixture.client.admin(), Some(fixture.admin.clone()));
     }
 
-    #[test]
+    #t[test]
     fn initialize_rejects_reinitialization() {
         let fixture = setup();
         initialize(&fixture);
-        assert_eq!(
+        assert_eq(
             fixture.client.try_initialize(&fixture.admin),
             Err(Ok(Error::AlreadyInitialized))
         );
     }
 
-    #[test]
+    #t[test]
     fn set_and_get_registered_name() {
         let fixture = setup();
         initialize(&fixture);
@@ -147,7 +157,7 @@ mod tests {
         let addr = Address::generate(&fixture.env);
         fixture.client.set(&n, &addr);
 
-        assert_eq!(fixture.client.get(&n), Some(addr));
+        assert_eq(fixture.client.get(&n), Some(addr));
     }
 
     #[test]
@@ -160,26 +170,33 @@ mod tests {
         let addr2 = Address::generate(&fixture.env);
 
         fixture.client.set(&n, &addr1);
-        assert_eq!(fixture.client.get(&n), Some(addr1.clone()));
+        assert_eq(fixture.client.get(&n), Some(addr1.clone()));
 
         fixture.client.set(&n, &addr2);
-        assert_eq!(fixture.client.get(&n), Some(addr2));
+        assert_eq(fixture.client.get(&n), Some(addr2));
     }
 
-    #[test]
-    #[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
-    fn unauthorized_set_fails() {
-        let mut fixture = setup();
+    /// Only the administrator can set a value. A non-admin caller must be
+    /// rejected by the auth check inside `set`, and the entry must remain
+    /// unchanged.
+    #t[test]
+    fn non_admin_cannot_set() {
+        let fixture = setup();
         initialize(&fixture);
 
-        // `setup()` mocks all auths; clear them so `admin.require_auth()` in
-        // `set()` actually runs. The client is not the admin, so it panics.
-        fixture.env.set_auths(&[]);
-
         let n = name(&fixture.env, "my-contract");
+        let addr = Address::generate(&fixture.env );
         let addr = Address::generate(&fixture.env);
 
-        fixture.client.set(&n, &addr);
+        // Authorize the user (not the admin) for the `set` invocation.
+        set_auths(&fixture, &fixture.user);
+
+        // The contract should return a contract error rather than panicking.
+        let result = fixture.client.try_set(&n, &addr);
+        assert!(result.is_err());
+
+        // The failed call must not have written anything.
+        assert_eq(fixture.client.get(&n), None);
     }
 
     #[test]
@@ -199,9 +216,9 @@ mod tests {
         fixture.client.set(&n2, &addr2);
         fixture.client.set(&n3, &addr3);
 
-        assert_eq!(fixture.client.get(&n1), Some(addr1));
-        assert_eq!(fixture.client.get(&n2), Some(addr2));
-        assert_eq!(fixture.client.get(&n3), Some(addr3));
+        assert_eq(fixture.client.get(&n1), Some(addr1));
+        assert_eq(fixture.client.get(&n2), Some(addr2));
+        assert_eq(fixture.client.get(&n3), Some(addr3));
     }
 
     #[test]
@@ -210,7 +227,7 @@ mod tests {
         initialize(&fixture);
 
         let n = name(&fixture.env, "nonexistent");
-        assert_eq!(fixture.client.get(&n), None);
+        assert_eq(fixture.client.get(&n), None);
     }
 
     #[test]
@@ -220,9 +237,9 @@ mod tests {
 
         let n = name(&fixture.env, "");
         let addr = Address::generate(&fixture.env);
-        assert_eq!(
+        assert_eq(
             fixture.client.try_set(&n, &addr),
-            Err(Ok(Error::NameTooLong))
+            Err( Ok(Error::NameTooLong))
         );
     }
 
@@ -233,7 +250,7 @@ mod tests {
 
         let long_name = name(&fixture.env, "a]bcdefghijklmnopqrstuvwxyz1234567890");
         let addr = Address::generate(&fixture.env);
-        assert_eq!(
+        assert_eq(
             fixture.client.try_set(&long_name, &addr),
             Err(Ok(Error::NameTooLong))
         );

@@ -447,7 +447,7 @@ mod tests {
     fn set_ledger_sequence(env: &Env, sequence: u32) {
         env.ledger().set(LedgerInfo {
             timestamp: env.ledger().timestamp(),
-            protocol_version: 27,
+            protocol_version: 28,
             sequence_number: sequence,
             network_id: Default::default(),
             base_reserve: 10,
@@ -671,6 +671,32 @@ mod tests {
         assert_eq!(client.balance(&alice), 200);
         assert_eq!(client.balance_at(&alice, &snapshot_id), 500);
         assert_eq!(client.balance_at(&bob, &snapshot_id), 0);
+    }
+
+    #[test]
+    fn test_balance_at_returns_pre_transfer_balance() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(TokenSnapshot, ());
+        let client = TokenSnapshotClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        let alice = Address::generate(&env);
+        let bob = Address::generate(&env);
+
+        client.initialize(&admin);
+        client.mint(&alice, &500);
+        let snapshot_id = client.create_snapshot();
+
+        client.transfer(&alice, &bob, &300);
+
+        assert_eq!(client.balance(&alice), 200);
+        assert_eq!(client.balance(&bob), 300);
+        assert_eq!(client.balance_at(&alice, &snapshot_id), 500);
+        assert_eq!(client.balance_at(&bob, &snapshot_id), 0);
+
+        let result = client.try_balance_at(&alice, &99);
+        assert_eq!(result, Err(Ok(Error::SnapshotNotFound)));
     }
 
     #[test]

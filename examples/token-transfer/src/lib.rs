@@ -329,7 +329,7 @@ impl TokenTransfer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Events as _};
+    use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _};
     use soroban_sdk::Env;
 
     fn setup() -> (Env, soroban_sdk::Address, TokenTransferClient<'static>) {
@@ -523,6 +523,61 @@ mod tests {
 
         client.approve(&alice, &bob, &0);
         assert_eq!(client.allowance(&alice, &bob), 0);
+    }
+
+    #[test]
+    fn test_approve_with_expiration_rules() {
+        let (env, _, client) = setup();
+        let alice = Address::generate(&env);
+        let bob = Address::generate(&env);
+        let charlie = Address::generate(&env);
+
+        client.mint(&alice, &1000);
+
+        let expiry: u64 = 1000;
+        // Approve bob with expiration at timestamp 1000
+        client.approve_with_expiration(&alice, &bob, &500, &expiry);
+        assert_eq!(client.allowance(&alice, &bob), 500);
+
+        // Before expiry: ledger timestamp = expiry - 1 (e.g. 999)
+        env.ledger().with_mut(|li| {
+            li.timestamp = expiry - 1;
+        });
+
+        // Allowance works before the expiry ledger time
+        client.transfer_from(&bob, &alice, &charlie, &200);
+        assert_eq!(client.balance(&charlie), 200);
+        assert_eq!(client.balance(&alice), 800);
+        assert_eq!(client.allowance(&alice, &bob), 300);
+
+        // At expiry: ledger timestamp = expiry (1000)
+        env.ledger().with_mut(|li| {
+            li.timestamp = expiry;
+        });
+
+        // Allowance fails at the expiry ledger time, returning contract error InsufficientAllowance
+        let result_at_expiry = client.try_transfer_from(&bob, &alice, &charlie, &100);
+        assert_eq!(
+            result_at_expiry,
+            Err(Ok(Error::InsufficientAllowance))
+        );
+
+        // After expiry: ledger timestamp = expiry + 10 (1010)
+        env.ledger().with_mut(|li| {
+            li.timestamp = expiry + 10;
+        });
+
+        // Allowance fails after the expiry ledger time as well
+        let result_after_expiry = client.try_transfer_from(&bob, &alice, &charlie, &100);
+        assert_eq!(
+            result_after_expiry,
+            Err(Ok(Error::InsufficientAllowance))
+        );
+
+        // Balances and remaining allowance remain unchanged after failed attempts
+        assert_eq!(client.balance(&charlie), 200);
+        assert_eq!(client.balance(&alice), 800);
+        assert_eq!(client.allowance(&alice, &bob), 300);
     }
 
     #[test]

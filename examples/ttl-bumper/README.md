@@ -93,6 +93,21 @@ Keeper Bot (cron) ──► bump_keys(keeper, [BumpTarget…])
                           └─ emit "bumped" event with keys_extended + earned
 ```
 
+## Bounty windows
+
+A successful bump makes that contract/key pair ineligible for another bounty
+until `extend_to - threshold` ledgers have elapsed, with a minimum of one ledger.
+Duplicate batch entries and repeated calls, including calls by another keeper,
+return `Skipped` during this window even if they supply a low `simulated_ttl`.
+The window survives registration updates and deregistration/re-registration.
+Unknown keys return `NotRegistered` and never earn a bounty. An insufficient pool
+returns the `InsufficientBountyPool` contract error and rolls back the whole batch,
+including its window markers, so funding the pool permits a clean retry.
+
+This example still simulates target TTLs; it does not extend another contract's
+storage or verify caller-supplied TTLs. The window prevents repeated payment for
+the recorded extension, not dishonest TTL reports after the window expires.
+
 ## Storage layout
 
 | Key | Storage | Description |
@@ -103,6 +118,7 @@ Keeper Bot (cron) ──► bump_keys(keeper, [BumpTarget…])
 | `DataKey::Count` | Persistent | Total registered entries |
 | `DataKey::Entry(contract, key)` | Persistent | `RegistryEntry` metadata |
 | `CtrKey::KeeperBalance(addr)` | Persistent | Accrued bounty per keeper |
+| `CtrKey::NextBumpLedger(contract, key)` | Persistent | First ledger eligible for the next bounty |
 
 ## Origin
 
