@@ -27,6 +27,7 @@ members = [
     "marketplace",
     "merkle-proof",
     "multi-token-vault",
+    "multisig-timelock-upgrade",
     "multisig-wallet",
     "oracle-consumer",
     "pagination",
