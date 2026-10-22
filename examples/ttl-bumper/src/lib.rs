@@ -41,7 +41,7 @@
 //! ## Batch metering
 //!
 //! `bump_keys` enforces `MAX_BATCH_SIZE = 20`.  Each entry in the batch
-//! performs at most one `extend_ttl` call and one storage read; the per-call
+//! performs at most one `extend_ttl` call and bounded registry/window reads; the per-call
 //! resource budget is therefore deterministic and proportional to batch size.
 //! Callers that need to service more than 20 keys split across multiple txns.
 //!
@@ -88,6 +88,8 @@ pub const DEFAULT_EXTEND_TO: u32 = 518_400;
 enum CtrKey {
     /// Accumulated bounty balance owed to a keeper address.
     KeeperBalance(Address),
+    /// First ledger in which a registered key may earn another extension bounty.
+    NextBumpLedger(Address, Symbol),
 }
 
 // ── errors ────────────────────────────────────────────────────────────────────
@@ -142,7 +144,7 @@ pub struct BumpTarget {
 pub enum BumpResult {
     /// Key was at risk and its TTL was extended; bounty credited.
     Extended,
-    /// Key's TTL exceeds threshold — skipped without bounty.
+    /// Key is healthy or already paid in this extension window — no bounty.
     Skipped,
     /// Key is not in the registry — skipped without bounty.
     NotRegistered,
@@ -271,6 +273,9 @@ impl TtlBumper {
     ///    balance with `bounty_per_key`.  If the pool cannot cover the bounty
     ///    the entire call is rejected with `InsufficientBountyPool`.
     ///
+    /// A successful extension suppresses further bounties for the same contract/key
+    /// until `extend_to - threshold` ledgers have elapsed (at least one ledger).
+    /// This applies across batches and keepers, even if they replay a low TTL.
     /// Returns a `Vec<BumpResult>` in the same order as `targets`.
     pub fn bump_keys(
         env: Env,
@@ -299,8 +304,12 @@ impl TtlBumper {
                     results.push_back(BumpResult::NotRegistered);
                 }
                 Some(entry) => {
-                    if target.simulated_ttl > entry.threshold {
-                        // Key is still healthy — skip without a bounty.
+                    let window_key =
+                        CtrKey::NextBumpLedger(target.contract.clone(), target.key_name.clone());
+                    let next_bump: u64 = env.storage().persistent().get(&window_key).unwrap_or(0);
+                    let ledger = u64::from(env.ledger().sequence());
+                    if target.simulated_ttl > entry.threshold || ledger < next_bump {
+                        // Key is healthy or its last extension is still in the paid window.
                         results.push_back(BumpResult::Skipped);
                     } else {
                         // Key is at risk — extend TTL and credit bounty.
@@ -329,6 +338,14 @@ impl TtlBumper {
                             return Err(Error::InsufficientBountyPool);
                         }
                         pool = pool.checked_sub(per_key).ok_or(Error::Overflow)?;
+                        let window = entry.extend_to.saturating_sub(entry.threshold).max(1);
+                        env.storage()
+                            .persistent()
+                            .set(&window_key, &(ledger + u64::from(window)));
+                        // Keep the marker live throughout the window where the network permits.
+                        // Persistent entries beyond the network TTL require archival restoration.
+                        let ttl = window.min(env.storage().max_ttl());
+                        env.storage().persistent().extend_ttl(&window_key, ttl, ttl);
                         keys_extended += 1;
                         results.push_back(BumpResult::Extended);
                     }
@@ -436,7 +453,7 @@ mod tests {
     fn set_ledger(env: &Env, sequence: u32, timestamp: u64) {
         env.ledger().set(LedgerInfo {
             timestamp,
-            protocol_version: 22,
+            protocol_version: env.ledger().protocol_version(),
             sequence_number: sequence,
             network_id: Default::default(),
             base_reserve: 10,
@@ -761,39 +778,25 @@ mod tests {
 
         register_key(&client, &c, &k);
 
-        // Drain the pool to zero.
-        // Pool = 100_000, bounty_per_key = 1_000 → 100 bumps to drain.
-        for i in 0_u32..100 {
-            // Re-register with a fresh key name each iteration so the entries
-            // exist; we reuse the same key for simplicity by bumping one key
-            // 100 times (re-registering to ensure it exists).
-            let ki = Symbol::new(&env, "OraclePrice");
-            let targets = vec![
-                &env,
-                BumpTarget {
-                    contract: c.clone(),
-                    key_name: ki,
-                    simulated_ttl: 1,
-                },
-            ];
-            let result = client.bump_keys(&keeper, &targets);
-            // All 100 bumps should succeed before the pool runs out.
-            assert_eq!(
-                result.get_unchecked(0),
-                BumpResult::Extended,
-                "bump {} failed",
-                i
-            );
-        }
-
-        assert_eq!(client.pool_balance(), 0);
-
-        // 101st bump must fail.
+        // Spend the pool in one eligible extension, then try another registered key.
+        client.set_bounty_per_key(&100_000);
         let targets = vec![
             &env,
             BumpTarget {
                 contract: c.clone(),
                 key_name: k,
+                simulated_ttl: 1,
+            },
+        ];
+        client.bump_keys(&keeper, &targets);
+        assert_eq!(client.pool_balance(), 0);
+        let next = symbol_short!("next");
+        register_key(&client, &c, &next);
+        let targets = vec![
+            &env,
+            BumpTarget {
+                contract: c,
+                key_name: next,
                 simulated_ttl: 1,
             },
         ];
@@ -872,7 +875,7 @@ mod tests {
         let mut targets = Vec::new(&env);
 
         for i in 0..MAX_BATCH_SIZE {
-            let s: [u8; 2] = [b'k', b'0' + (i % 10) as u8];
+            let s: [u8; 3] = [b'k', b'0' + (i / 10) as u8, b'0' + (i % 10) as u8];
             let name = core::str::from_utf8(&s).unwrap_or("kx");
             let ki = Symbol::new(&env, name);
             client.register_key(&c, &ki, &100_u32, &518_400_u32);
@@ -1071,6 +1074,7 @@ mod tests {
         env.mock_all_auths();
         client.init(&admin, &1_000_i128);
 
+        env.set_auths(&[]);
         // Auth no longer mocked — non-admin attempt must fail.
         let contract = Address::generate(&env);
         let key = Symbol::new(&env, "OraclePrice");
@@ -1092,6 +1096,7 @@ mod tests {
         let k = Symbol::new(&env, "OraclePrice");
         client.register_key(&c, &k, &100_u32, &518_400_u32);
 
+        env.set_auths(&[]);
         // Without mock_all_auths, keeper auth is enforced.
         let keeper = Address::generate(&env);
         let targets = vec![
@@ -1143,5 +1148,126 @@ mod tests {
         assert_eq!(client.bounty_balance(&keeper1), 1_000_i128);
         assert_eq!(client.bounty_balance(&keeper2), 1_000_i128);
         assert_eq!(client.pool_balance(), 98_000_i128);
+    }
+
+    #[test]
+    fn registered_keys_are_paid_once_per_extension_window() {
+        let (env, _, client) = setup();
+        let keeper = Address::generate(&env);
+        let other_keeper = Address::generate(&env);
+        let contract = Address::generate(&env);
+        let other_contract = Address::generate(&env);
+        let key = symbol_short!("price");
+        let healthy_key = symbol_short!("healthy");
+        client.register_key(&contract, &key, &10, &30);
+        client.register_key(&contract, &healthy_key, &10, &30);
+        let target = BumpTarget {
+            contract: contract.clone(),
+            key_name: key.clone(),
+            simulated_ttl: 10,
+        };
+        let targets = vec![
+            &env,
+            target.clone(),
+            BumpTarget {
+                contract: other_contract,
+                ..target.clone()
+            },
+            BumpTarget {
+                key_name: symbol_short!("unknown"),
+                ..target.clone()
+            },
+            BumpTarget {
+                key_name: healthy_key,
+                simulated_ttl: 11,
+                ..target.clone()
+            },
+            target.clone(),
+        ];
+        assert_eq!(
+            client.bump_keys(&keeper, &targets),
+            vec![
+                &env,
+                BumpResult::Extended,
+                BumpResult::NotRegistered,
+                BumpResult::NotRegistered,
+                BumpResult::Skipped,
+                BumpResult::Skipped,
+            ]
+        );
+        assert_eq!(client.bounty_balance(&keeper), 1_000);
+        assert_eq!(client.pool_balance(), 99_000);
+        assert_eq!(client.registry_count(), 2);
+
+        // A second keeper and a repeated call cannot collect for the same extension.
+        let one = vec![&env, target];
+        assert_eq!(
+            client.bump_keys(&other_keeper, &one),
+            vec![&env, BumpResult::Skipped]
+        );
+        let paid_at = env.ledger().sequence();
+        env.ledger()
+            .with_mut(|ledger| ledger.sequence_number = paid_at + 19);
+        assert_eq!(
+            client.bump_keys(&keeper, &one),
+            vec![&env, BumpResult::Skipped]
+        );
+        assert_eq!(client.bounty_balance(&keeper), 1_000);
+        assert_eq!(client.bounty_balance(&other_keeper), 0);
+        assert_eq!(client.pool_balance(), 99_000);
+
+        // The extended TTL reaches the threshold again after 30 - 10 ledgers.
+        env.ledger()
+            .with_mut(|ledger| ledger.sequence_number = paid_at + 20);
+        assert_eq!(
+            client.bump_keys(&other_keeper, &one),
+            vec![&env, BumpResult::Extended]
+        );
+        assert_eq!(client.bounty_balance(&other_keeper), 1_000);
+        assert_eq!(client.pool_balance(), 98_000);
+    }
+
+    #[test]
+    fn insufficient_pool_returns_contract_error_and_rolls_back_batch() {
+        let (env, _, client) = setup();
+        let keeper = Address::generate(&env);
+        let contract = Address::generate(&env);
+        let first = symbol_short!("first");
+        let second = symbol_short!("second");
+        client.register_key(&contract, &first, &10, &30);
+        client.register_key(&contract, &second, &10, &30);
+        client.set_bounty_per_key(&60_000);
+        let targets = vec![
+            &env,
+            BumpTarget {
+                contract: contract.clone(),
+                key_name: first,
+                simulated_ttl: 1,
+            },
+            BumpTarget {
+                contract,
+                key_name: second,
+                simulated_ttl: 1,
+            },
+        ];
+        assert_eq!(
+            client.try_bump_keys(&keeper, &targets),
+            Err(Ok(Error::InsufficientBountyPool))
+        );
+        assert_eq!(client.pool_balance(), 100_000);
+        assert_eq!(client.bounty_balance(&keeper), 0);
+
+        // No paid-window marker from the failed batch may suppress the retry.
+        client.fund_bounty_pool(&20_000);
+        assert_eq!(
+            client.bump_keys(&keeper, &targets),
+            vec![&env, BumpResult::Extended, BumpResult::Extended]
+        );
+        assert_eq!(client.pool_balance(), 0);
+        assert_eq!(client.bounty_balance(&keeper), 120_000);
+        assert_eq!(
+            client.bump_keys(&keeper, &targets),
+            vec![&env, BumpResult::Skipped, BumpResult::Skipped]
+        );
     }
 }

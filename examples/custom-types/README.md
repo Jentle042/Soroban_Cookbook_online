@@ -20,7 +20,7 @@ stellar contract build --manifest-path examples/custom-types/Cargo.toml
 ```
 
 The optimised Wasm is written to
-`examples/target/wasm32-unknown-unknown/release/custom_types_example.wasm`.
+`examples/target/wasm32-unknown-unknown/release/custom_types.wasm`.
 
 ## Test
 

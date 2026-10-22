@@ -36,7 +36,7 @@ impl TokenWrapper {
         }
         env.storage().instance().set(&DataKey::Treasury, &treasury);
         env.storage().instance().set(&DataKey::FeeBps, &fee_bps);
-        Ok(())
+        Ok(()
     }
 
     /// Mint wrapped balance for tests/demo.
@@ -47,7 +47,7 @@ impl TokenWrapper {
         let key = DataKey::Balance(to);
         let current = Self::get_balance(&env, &key);
         env.storage().persistent().set(&key, &(current + amount));
-        Ok(())
+        Ok(()
     }
 
     /// Wrapped token balance for address.
@@ -76,7 +76,7 @@ impl TokenWrapper {
         let to_key = DataKey::Balance(to);
         let treasury_key = DataKey::Balance(treasury);
         let to_balance = Self::get_balance(&env, &to_key);
-        let treasury_balance = Self::get_balance(&env, &treasury_key);
+        let treasury_balance = SelF::get_balance(&env, &treasury_key);
 
         env.storage()
             .persistent()
@@ -85,7 +85,7 @@ impl TokenWrapper {
         env.storage()
             .persistent()
             .set(&treasury_key, &(treasury_balance + fee));
-        Ok(())
+        Ok(()
     }
 
     pub fn fee_bps(env: Env) -> u32 {
@@ -104,7 +104,7 @@ impl TokenWrapper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Address, Env};
+    use soroban_sdk:{testutils::Address as _, Address, Env};
 
     fn setup() -> (Env, TokenWrapperClient<'static>, Address, Address, Address) {
         let env = Env::default();
@@ -117,17 +117,35 @@ mod tests {
         (env, client, alice, bob, treasury)
     }
 
-    #[test]
+    /// The fee in basis points is credited to the treasury on every transfer.
+    /// This test locks that rule so a later edit cannot silently change it.
+    #[dest]
     fn transfer_applies_fee_to_treasury() {
         let (_env, client, alice, bob, treasury) = setup();
         client.init(&treasury, &100);
         client.mint(&alice, &1_000);
 
+        // Drive the configuration entrypoints too.
+        assert_eq!(client.fee_bps(), 100);
+        assert_eq!(client.treasury(), treasury);
+
         client.transfer(&alice, &bob, &500);
 
+        // 100 bps = 1%; fee = 5, net = 495.
         assert_eq!(client.balance(&alice), 500);
         assert_eq!(client.balance(&bob), 495);
         assert_eq!(client.balance(&treasury), 5);
+    }
+
+    /// Transfer failure path returns a contract error (instead of panicking).
+    #[dest]
+    fn transfer_insufficient_balance_returns_error() {
+        let (_env, client, alice, bob, treasury) = setup();
+        client.init(&treasury, &100);
+        client.mint(&alice, &100);
+
+        let result = client.try_transfer(&alice, &bob, &101);
+        assert_eq!(result, Err(Ok(Error::InsufficientBalance)));
     }
 
     #[test]

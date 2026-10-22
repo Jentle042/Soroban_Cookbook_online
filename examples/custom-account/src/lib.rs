@@ -124,14 +124,15 @@ mod tests {
 
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
-    use rand::rngs::OsRng;
     use soroban_sdk::{
         testutils::{Address as _, BytesN as _},
         vec, Address, IntoVal,
     };
 
-    fn generate_signer() -> SigningKey {
-        SigningKey::generate(&mut OsRng)
+    /// Deterministic signer derived from a one-byte seed. Tests do not need
+    /// cryptographic randomness, and fixed keys keep failures reproducible.
+    fn generate_signer(seed: u8) -> SigningKey {
+        SigningKey::from_bytes(&[seed; 32])
     }
 
     fn signer_public_key(env: &Env, signer: &SigningKey) -> BytesN<32> {
@@ -165,7 +166,7 @@ mod tests {
     #[test]
     fn test_init() {
         let env = Env::default();
-        let signer = generate_signer();
+        let signer = generate_signer(1);
         let public_key = signer_public_key(&env, &signer);
         let account = create_account(&env, public_key.clone(), 1_000);
 
@@ -179,7 +180,7 @@ mod tests {
     #[test]
     fn test_valid_signature_within_limit_is_authorized() {
         let env = Env::default();
-        let signer = generate_signer();
+        let signer = generate_signer(1);
         let public_key = signer_public_key(&env, &signer);
         let account = create_account(&env, public_key, 1_000);
 
@@ -198,13 +199,13 @@ mod tests {
     #[test]
     fn test_invalid_signature_is_rejected() {
         let env = Env::default();
-        let signer = generate_signer();
+        let signer = generate_signer(1);
         let public_key = signer_public_key(&env, &signer);
         let account = create_account(&env, public_key, 1_000);
 
         let payload = BytesN::<32>::random(&env);
         // Signed by a key that never registered with this account.
-        let impostor = generate_signer();
+        let impostor = generate_signer(2);
         let bad_signature = sign(&env, &impostor, &payload);
 
         let result = env.try_invoke_contract_check_auth::<AccountError>(
@@ -219,7 +220,7 @@ mod tests {
     #[test]
     fn test_spend_over_policy_limit_is_rejected() {
         let env = Env::default();
-        let signer = generate_signer();
+        let signer = generate_signer(1);
         let public_key = signer_public_key(&env, &signer);
         let account = create_account(&env, public_key, 1_000);
 
@@ -240,5 +241,59 @@ mod tests {
             .unwrap(),
             AccountError::PolicyLimitExceeded
         );
+    }
+
+    /// Locks the rule `init` establishes for the authorization entry point:
+    /// before `init` the account rejects authorization with the contract error
+    /// [`AccountError::NotInitialized`]; after `init` a valid signature over
+    /// the exact payload is accepted, while a tampered payload (same signature
+    /// bytes, different payload) is rejected.
+    #[test]
+    fn test_init_enables_auth_and_rejects_tampered_payload() {
+        let env = Env::default();
+        let signer = generate_signer(1);
+        let public_key = signer_public_key(&env, &signer);
+        let account = CustomAccountClient::new(&env, &env.register(CustomAccount, ()));
+
+        let payload = BytesN::<32>::random(&env);
+        let signature = sign(&env, &signer, &payload);
+
+        // Before init the authorization entry point returns a contract error,
+        // not a host trap.
+        assert_eq!(
+            env.try_invoke_contract_check_auth::<AccountError>(
+                &account.address,
+                &payload,
+                signature.clone().into_val(&env),
+                &vec![&env, spend_context(&env, 500)],
+            )
+            .err()
+            .unwrap()
+            .unwrap(),
+            AccountError::NotInitialized
+        );
+
+        account.init(&public_key, &1_000);
+
+        // After init a valid signature over the exact payload is authorized.
+        env.try_invoke_contract_check_auth::<AccountError>(
+            &account.address,
+            &payload,
+            signature.clone().into_val(&env),
+            &vec![&env, spend_context(&env, 500)],
+        )
+        .unwrap();
+
+        // A tampered payload — the signature no longer covers what the host
+        // asked us to verify — is rejected by the signature check.
+        let tampered = BytesN::<32>::random(&env);
+        assert!(env
+            .try_invoke_contract_check_auth::<AccountError>(
+                &account.address,
+                &tampered,
+                signature.into_val(&env),
+                &vec![&env, spend_context(&env, 500)],
+            )
+            .is_err());
     }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useId, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { ChevronDown } from 'lucide-react';
 import styles from './Collapsible.module.css';
@@ -50,6 +50,7 @@ export default function Collapsible({
   className,
 }: CollapsibleProps) {
   const isControlled = controlledOpen !== undefined;
+  const panelId = useId();
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const isOpen = isControlled ? controlledOpen : internalOpen;
   const contentRef = useRef<HTMLDivElement>(null);
@@ -91,6 +92,7 @@ export default function Collapsible({
       <summary
         className={styles.collapsibleSummary}
         aria-expanded={isOpen}
+        aria-controls={panelId}
         onKeyDown={handleSummaryKeyDown}>
         <span className={styles.collapsibleSummaryText}>{summary}</span>
         <span
@@ -100,6 +102,7 @@ export default function Collapsible({
         </span>
       </summary>
       <div
+        id={panelId}
         className={styles.collapsibleContent}
         style={
           {
