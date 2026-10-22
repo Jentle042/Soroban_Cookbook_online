@@ -1,18 +1,18 @@
 {
   "default_branch": "main",
   "branches": [
-    "fix/issue-1309-cover-buy-behavior-in-examples-marketplace",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in",
     "main",
     "origin"
   ],
   "parent": {
-    "fix/issue-1309-cover-buy-behavior-in-examples-marketplace": "main",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in": "main",
     "main": null,
     "origin": "main"
   },
   "order": [
     "main",
-    "fix/issue-1309-cover-buy-behavior-in-examples-marketplace",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in",
     "origin"
   ]
 }

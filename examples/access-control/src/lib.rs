@@ -190,6 +190,35 @@ mod tests {
     }
 
     #[test]
+    fn test_revoked_admin_cannot_call_admin_only_action() {
+        let (env, admin, client) = setup();
+        let alice = Address::generate(&env);
+        client.grant_role(&admin, &alice, &Role::Admin);
+
+        client.revoke_role(&alice, &admin);
+
+        assert_eq!(client.get_role(&admin), None);
+        client.admin_only_action(&alice);
+        assert_eq!(
+            client.try_admin_only_action(&admin),
+            Err(Ok(Error::Unauthorized))
+        );
+    }
+
+    #[test]
+    fn test_non_admin_cannot_revoke_roles() {
+        let (env, admin, client) = setup();
+        let outsider = Address::generate(&env);
+
+        assert_eq!(
+            client.try_revoke_role(&outsider, &admin),
+            Err(Ok(Error::Unauthorized))
+        );
+        assert_eq!(client.get_role(&admin), Some(Role::Admin));
+        client.admin_only_action(&admin);
+    }
+
+    #[test]
     fn test_get_role_returns_none_for_unknown_address() {
         let (env, _, client) = setup();
         let stranger = Address::generate(&env);
