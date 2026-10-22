@@ -4,8 +4,9 @@
 //!
 //! A soulbound (non-transferable) token for Soroban. Once minted to an
 //! address the token is permanently bound — transfer operations are
-//! intentionally disabled and will always panic. Only the admin may mint
-//! new tokens or burn (revoke) existing ones.
+//! intentionally disabled and always fail with
+//! [`Error::TransferNotAllowed`]. Only the admin may mint new tokens or burn
+//! (revoke) existing ones.
 //!
 //! **Typical use-cases:** verifiable credentials, achievement badges, KYC
 //! attestations, reputation scores, and identity anchors.
@@ -56,6 +57,8 @@ pub enum Error {
     InsufficientBalance = 3,
     /// The contract has already been initialized.
     AlreadyInitialized = 4,
+    /// Transfers are permanently disabled — soulbound tokens never move.
+    TransferNotAllowed = 5,
 }
 
 // ── Contract ─────────────────────────────────────────────────────────────────
@@ -168,28 +171,29 @@ impl SoulboundToken {
 
     /// **Soulbound tokens cannot be transferred.**
     ///
-    /// This function always panics to enforce the non-transferability invariant.
-    /// It exists in the public interface so that clients expecting a standard
-    /// token interface receive a clear, descriptive error rather than a missing-
-    /// function error.
+    /// The call is always rejected with [`Error::TransferNotAllowed`], so no
+    /// balance is ever moved. It exists in the public interface so that
+    /// clients expecting a standard token interface receive a clear,
+    /// descriptive contract error rather than a missing-function error.
     ///
     /// See `examples/token-transfer/` for a freely-transferable token.
-    pub fn transfer(_env: Env, _from: Address, _to: Address, _amount: i128) {
-        panic!("soulbound: transfer not allowed — tokens are permanently bound to the holder");
+    pub fn transfer(_env: Env, _from: Address, _to: Address, _amount: i128) -> Result<(), Error> {
+        Err(Error::TransferNotAllowed)
     }
 
     /// **Soulbound tokens cannot be transferred via allowance.**
     ///
-    /// Like `transfer`, this always panics. Soulbound tokens do not support
-    /// the approve/transferFrom delegation pattern.
+    /// Like `transfer`, this is always rejected with
+    /// [`Error::TransferNotAllowed`]. Soulbound tokens do not support the
+    /// approve/transfer_from delegation pattern.
     pub fn transfer_from(
         _env: Env,
         _spender: Address,
         _from: Address,
         _to: Address,
         _amount: i128,
-    ) {
-        panic!("soulbound: transfer_from not allowed — tokens are permanently bound to the holder");
+    ) -> Result<(), Error> {
+        Err(Error::TransferNotAllowed)
     }
 
     // ── Burning (admin revocation) ────────────────────────────────────────────
@@ -287,7 +291,13 @@ impl SoulboundToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env};
+    use soroban_sdk::{
+        symbol_short,
+        testutils::{
+            Address as _, AuthorizedFunction, AuthorizedInvocation, MockAuth, MockAuthInvoke,
+        },
+        Env, IntoVal, Val, Vec,
+    };
 
     // ── Test helpers ─────────────────────────────────────────────────────────
 
@@ -308,6 +318,29 @@ mod tests {
         );
 
         (env, admin, client)
+    }
+
+    /// Authorize `admin` for exactly one contract entrypoint.
+    ///
+    /// Uses the Soroban SDK mock-auth helpers so the test drives the same
+    /// authorization path a real caller would use: only the invocations
+    /// listed here are accepted, and every other authorization is rejected.
+    fn mock_admin_auth(
+        env: &Env,
+        contract_id: &Address,
+        admin: &Address,
+        fn_name: &str,
+        args: Vec<Val>,
+    ) {
+        env.mock_auths(&[MockAuth {
+            address: admin,
+            invoke: &MockAuthInvoke {
+                contract: contract_id,
+                fn_name,
+                args,
+                sub_invokes: &[],
+            },
+        }]);
     }
 
     // ── Initialization ───────────────────────────────────────────────────────
@@ -409,10 +442,11 @@ mod tests {
 
     // ── Non-transferability ──────────────────────────────────────────────────
 
-    /// `transfer` must always panic — soulbound tokens cannot move between
+    /// `transfer` must always fail — soulbound tokens cannot move between
     /// addresses regardless of balance, amount, or caller identity.
-    /// The Soroban VM wraps the contract panic in a HostError envelope,
-    /// so we assert on the panic itself rather than the exact message.
+    /// The contract rejects the call with `Error::TransferNotAllowed`, and the
+    /// generated client surfaces that contract error as a panic, so we assert
+    /// on the panic itself rather than the exact message.
     #[test]
     #[should_panic]
     fn test_transfer_always_panics() {
@@ -426,7 +460,7 @@ mod tests {
         client.transfer(&alice, &bob, &1);
     }
 
-    /// `transfer_from` must always panic — the allowance/delegation pattern
+    /// `transfer_from` must always fail — the allowance/delegation pattern
     /// is also disabled for soulbound tokens.
     #[test]
     #[should_panic]
@@ -442,7 +476,7 @@ mod tests {
         client.transfer_from(&charlie, &alice, &bob, &1);
     }
 
-    /// `transfer` panics even when the holder has zero balance — the
+    /// `transfer` fails even when the holder has zero balance — the
     /// restriction is unconditional and does not depend on state.
     #[test]
     #[should_panic]
@@ -451,8 +485,111 @@ mod tests {
         let alice = Address::generate(&env);
         let bob = Address::generate(&env);
 
-        // No mint — zero balance — still must panic.
+        // No mint — zero balance — still must fail.
         client.transfer(&alice, &bob, &0);
+    }
+
+    // ── Transfer regression coverage (#1326) ─────────────────────────────────
+
+    /// `transfer` must be rejected with the dedicated contract error.
+    ///
+    /// Regression test for #1326: the example is copied into other contracts,
+    /// so the non-transferability rule needs an executable test that a later
+    /// edit cannot silently break. The result is captured and matched against
+    /// the exact contract error — no `unwrap()` on the failure path — so the
+    /// test fails both when `transfer` starts succeeding and when it fails for
+    /// an unrelated reason.
+    #[test]
+    fn test_transfer_fails_with_contract_error() {
+        let (env, admin, client) = setup();
+        let alice = Address::generate(&env);
+        let bob = Address::generate(&env);
+
+        // Minting is admin-gated: authorize the admin for this call only.
+        mock_admin_auth(
+            &env,
+            &client.address,
+            &admin,
+            "mint",
+            (admin.clone(), alice.clone(), 1i128).into_val(&env),
+        );
+        client.mint(&admin, &alice, &1);
+
+        // The admin's authorization was genuinely required by `mint`.
+        assert_eq!(
+            env.auths(),
+            [(
+                admin.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        client.address.clone(),
+                        symbol_short!("mint"),
+                        (admin.clone(), alice.clone(), 1i128).into_val(&env),
+                    )),
+                    sub_invocations: [].into(),
+                },
+            )]
+        );
+
+        // The transfer must be rejected with the soulbound contract error.
+        let result = client.try_transfer(&alice, &bob, &1);
+        assert_eq!(result, Err(Ok(Error::TransferNotAllowed)));
+
+        // The rejected transfer must not have moved any balance.
+        assert_eq!(client.balance(&alice), 1);
+        assert_eq!(client.balance(&bob), 0);
+        assert_eq!(client.total_supply(), 1);
+
+        // The admin can still revoke the badge.
+        mock_admin_auth(
+            &env,
+            &client.address,
+            &admin,
+            "burn",
+            (admin.clone(), alice.clone(), 1i128).into_val(&env),
+        );
+        client.burn(&admin, &alice, &1);
+
+        assert_eq!(client.balance(&alice), 0);
+        assert_eq!(client.total_supply(), 0);
+    }
+
+    /// `transfer_from` must be rejected with the same contract error — the
+    /// allowance/delegation route is closed as well.
+    #[test]
+    fn test_transfer_from_fails_with_contract_error() {
+        let (env, admin, client) = setup();
+        let alice = Address::generate(&env);
+        let bob = Address::generate(&env);
+        let charlie = Address::generate(&env);
+
+        client.mint(&admin, &alice, &1);
+
+        // Even with a spender attempting a delegated transfer, this must fail.
+        let result = client.try_transfer_from(&charlie, &alice, &bob, &1);
+        assert_eq!(result, Err(Ok(Error::TransferNotAllowed)));
+
+        // The rejected transfer must not have moved any balance.
+        assert_eq!(client.balance(&alice), 1);
+        assert_eq!(client.balance(&bob), 0);
+        assert_eq!(client.total_supply(), 1);
+    }
+
+    /// The transfer restriction is unconditional: it is reported with the
+    /// soulbound contract error even when the holder has no balance at all.
+    #[test]
+    fn test_transfer_fails_with_contract_error_on_zero_balance() {
+        let (env, _, client) = setup();
+        let alice = Address::generate(&env);
+        let bob = Address::generate(&env);
+
+        // No mint — zero balance — still must fail with the same error.
+        let result = client.try_transfer(&alice, &bob, &0);
+        assert_eq!(result, Err(Ok(Error::TransferNotAllowed)));
+
+        assert_eq!(client.balance(&alice), 0);
+        assert_eq!(client.balance(&bob), 0);
+        assert_eq!(client.total_supply(), 0);
     }
 
     // ── Burning (admin revocation) ────────────────────────────────────────────

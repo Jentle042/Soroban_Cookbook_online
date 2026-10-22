@@ -310,4 +310,22 @@ mod tests {
         let result = client.try_refund(&depositor);
         assert_eq!(result, Err(Ok(Error::NotDeposited)));
     }
+
+    #[test]
+    fn test_refund_after_consume_fails() {
+        let (env, admin, depositor, token_addr, client) = setup();
+
+        client.deposit(&depositor, &250);
+        client.consume(&admin);
+
+        let result = client.try_refund(&depositor);
+        assert_eq!(result, Err(Ok(Error::NotDeposited)));
+
+        // The admin keeps the consumed deposit; the depositor cannot reclaim it.
+        let token_client = token::Client::new(&env, &token_addr);
+        assert_eq!(client.get_state(), Some(DepositState::Consumed));
+        assert_eq!(token_client.balance(&admin), 250);
+        assert_eq!(token_client.balance(&depositor), 750);
+        assert_eq!(token_client.balance(&client.address), 0);
+    }
 }
