@@ -1,21 +1,18 @@
 {
   "default_branch": "main",
   "branches": [
-    "fix/issue-1311-cover-execute-behavior-in-examples-multisig",
-    "fix/issue-1316-cover-get-price-checked-behavior-in-examples",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in",
     "main",
     "origin"
   ],
   "parent": {
-    "fix/issue-1311-cover-execute-behavior-in-examples-multisig": "main",
-    "fix/issue-1316-cover-get-price-checked-behavior-in-examples": "main",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in": "main",
     "main": null,
     "origin": "main"
   },
   "order": [
     "main",
-    "fix/issue-1311-cover-execute-behavior-in-examples-multisig",
-    "fix/issue-1316-cover-get-price-checked-behavior-in-examples",
+    "fix/issue-942-disclose-docfeedback-localstorage-use-in",
     "origin"
   ]
 }

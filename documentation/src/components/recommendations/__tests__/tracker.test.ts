@@ -86,8 +86,9 @@ describe('recommendation tracker', () => {
     const history = getHistory();
 
     expect(history.visitedDocs).toHaveLength(20);
-    expect(history.visitedDocs[0]).toBe('doc-20');
-    expect(history.visitedDocs).not.toContain('doc-0');
+    expect(history.visitedDocs).toEqual(
+      Array.from({ length: 20 }, (_, index) => `doc-${20 - index}`),
+    );
   });
 
   it('ignores empty doc ids and clears saved history', () => {

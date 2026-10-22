@@ -641,7 +641,7 @@ mod tests {
 
     fn set_ledger_timestamp(env: &Env, timestamp: u64) {
         env.ledger().set(LedgerInfo {
-            protocol_version: 27,
+            protocol_version: 28,
             sequence_number: env.ledger().sequence(),
             timestamp,
             network_id: Default::default(),
@@ -672,7 +672,7 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
         env.ledger().set(LedgerInfo {
-            protocol_version: 27,
+            protocol_version: 28,
             sequence_number: 1,
             timestamp: T0,
             network_id: Default::default(),
@@ -1081,6 +1081,38 @@ mod tests {
         assert_eq!(fx.coll.balance(&fx.liquidator), 735);
         assert_eq!(fx.client.total_collateral(), 265);
         assert_eq!(fx.client.total_debt(), 0);
+    }
+
+    #[test]
+    fn test_liquidate_succeeds_only_for_undercollateralized_position() {
+        let fx = setup();
+
+        fx.client.deposit(&fx.user, &1_000);
+        fx.client.borrow(&fx.user, &700);
+        fx.debt_tok.transfer(&fx.user, &fx.liquidator, &700);
+
+        assert_eq!(
+            fx.client.try_liquidate(&fx.user, &fx.liquidator, &700),
+            Err(Ok(Error::PositionHealthy))
+        );
+        assert_eq!(
+            fx.client.position(&fx.user),
+            Position {
+                collateral: 1_000,
+                debt: 700,
+            }
+        );
+
+        MockOracleClient::new(&fx.env, &fx.oracle_id).set_price(&800_000);
+        fx.client.liquidate(&fx.user, &fx.liquidator, &700);
+
+        assert_eq!(
+            fx.client.position(&fx.user),
+            Position {
+                collateral: 265,
+                debt: 0,
+            }
+        );
     }
 
     #[test]
