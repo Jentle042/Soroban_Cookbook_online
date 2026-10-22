@@ -72,9 +72,10 @@ for an ERC-20-style implementation with allowances.
 <PatternSection id="implementation" title="Implementation">
 
 The contract exposes the standard token metadata interface (`name`, `symbol`,
-`decimals`) but **overrides `transfer` and `transfer_from` to always panic**,
-enforcing non-transferability at the contract level. Only the stored admin may
-mint new tokens or burn (revoke) existing ones.
+`decimals`) but **overrides `transfer` and `transfer_from` to always fail with
+the `TransferNotAllowed` contract error**, enforcing non-transferability at the
+contract level. Only the stored admin may mint new tokens or burn (revoke)
+existing ones.
 
 <PatternCallout variant="danger" title="⚠️ Disclaimer: Un-audited Example">
 **This contract is provided for educational purposes only and has not been audited. Do NOT use in production or with real funds.**
@@ -114,6 +115,7 @@ pub enum Error {
     InvalidAmount = 2,
     InsufficientBalance = 3,
     AlreadyInitialized = 4,
+    TransferNotAllowed = 5,
 }
 
 #[contract]
@@ -180,10 +182,11 @@ impl SoulboundToken {
 
     /// DISABLED — soulbound tokens cannot be transferred.
     ///
-    /// This function always panics. It exists in the interface so that clients
-    /// expecting a standard token API receive a descriptive error message.
-    pub fn transfer(_env: Env, _from: Address, _to: Address, _amount: i128) {
-        panic!("soulbound: transfer not allowed — tokens are permanently bound to the holder");
+    /// The call always fails with `Error::TransferNotAllowed`. It exists in the
+    /// interface so that clients expecting a standard token API receive a
+    /// descriptive contract error.
+    pub fn transfer(_env: Env, _from: Address, _to: Address, _amount: i128) -> Result<(), Error> {
+        Err(Error::TransferNotAllowed)
     }
 
     /// DISABLED — soulbound tokens cannot be transferred via allowance.
@@ -193,8 +196,8 @@ impl SoulboundToken {
         _from: Address,
         _to: Address,
         _amount: i128,
-    ) {
-        panic!("soulbound: transfer_from not allowed — tokens are permanently bound to the holder");
+    ) -> Result<(), Error> {
+        Err(Error::TransferNotAllowed)
     }
 
     /// Admin-only: burn (revoke) tokens from `from`.
@@ -251,7 +254,13 @@ impl SoulboundToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env};
+    use soroban_sdk::{
+        symbol_short,
+        testutils::{
+            Address as _, AuthorizedFunction, AuthorizedInvocation, MockAuth, MockAuthInvoke,
+        },
+        Env, IntoVal, Val, Vec,
+    };
 
     fn setup() -> (Env, Address, SoulboundTokenClient<'static>) {
         let env = Env::default();
@@ -265,9 +274,28 @@ mod tests {
             &String::from_str(&env, "Soroban Contributor Badge"),
             &String::from_str(&env, "SCB"),
             &0,
-        ).unwrap();
+        );
 
         (env, admin, client)
+    }
+
+    /// Authorize `admin` for exactly one contract entrypoint.
+    fn mock_admin_auth(
+        env: &Env,
+        contract_id: &Address,
+        admin: &Address,
+        fn_name: &str,
+        args: Vec<Val>,
+    ) {
+        env.mock_auths(&[MockAuth {
+            address: admin,
+            invoke: &MockAuthInvoke {
+                contract: contract_id,
+                fn_name,
+                args,
+                sub_invokes: &[],
+            },
+        }]);
     }
 
     #[test]
@@ -275,7 +303,7 @@ mod tests {
         let (env, admin, client) = setup();
         let alice = Address::generate(&env);
 
-        client.mint(&admin, &alice, &1).unwrap();
+        client.mint(&admin, &alice, &1);
         assert_eq!(client.balance(&alice), 1);
     }
 
@@ -290,33 +318,66 @@ mod tests {
         assert_eq!(client.balance(&victim), 0);
     }
 
-    /// transfer() must ALWAYS panic — this is the core soulbound invariant.
+    /// transfer() must ALWAYS fail with the soulbound contract error — this is
+    /// the core soulbound invariant. The result is captured and matched
+    /// against the exact error, so the test fails if transfer ever succeeds.
     #[test]
-    #[should_panic(
-        expected = "soulbound: transfer not allowed — tokens are permanently bound to the holder"
-    )]
-    fn test_transfer_always_panics() {
+    fn test_transfer_fails_with_contract_error() {
         let (env, admin, client) = setup();
         let alice = Address::generate(&env);
         let bob = Address::generate(&env);
 
-        client.mint(&admin, &alice, &1).unwrap();
-        client.transfer(&alice, &bob, &1); // must panic
+        // Minting is admin-gated: authorize the admin for this call only.
+        mock_admin_auth(
+            &env,
+            &client.address,
+            &admin,
+            "mint",
+            (admin.clone(), alice.clone(), 1i128).into_val(&env),
+        );
+        client.mint(&admin, &alice, &1);
+
+        // The admin's authorization was genuinely required by `mint`.
+        assert_eq!(
+            env.auths(),
+            [(
+                admin.clone(),
+                AuthorizedInvocation {
+                    function: AuthorizedFunction::Contract((
+                        client.address.clone(),
+                        symbol_short!("mint"),
+                        (admin.clone(), alice.clone(), 1i128).into_val(&env),
+                    )),
+                    sub_invocations: [].into(),
+                },
+            )]
+        );
+
+        // The transfer must be rejected with the soulbound contract error.
+        let result = client.try_transfer(&alice, &bob, &1);
+        assert_eq!(result, Err(Ok(Error::TransferNotAllowed)));
+
+        // The rejected transfer must not have moved any balance.
+        assert_eq!(client.balance(&alice), 1);
+        assert_eq!(client.balance(&bob), 0);
+        assert_eq!(client.total_supply(), 1);
     }
 
-    /// transfer_from() must ALSO panic — no delegation route exists.
+    /// transfer_from() must ALSO fail — no delegation route exists.
     #[test]
-    #[should_panic(
-        expected = "soulbound: transfer_from not allowed — tokens are permanently bound to the holder"
-    )]
-    fn test_transfer_from_always_panics() {
+    fn test_transfer_from_fails_with_contract_error() {
         let (env, admin, client) = setup();
         let alice = Address::generate(&env);
         let bob = Address::generate(&env);
         let charlie = Address::generate(&env);
 
-        client.mint(&admin, &alice, &1).unwrap();
-        client.transfer_from(&charlie, &alice, &bob, &1); // must panic
+        client.mint(&admin, &alice, &1);
+
+        let result = client.try_transfer_from(&charlie, &alice, &bob, &1);
+        assert_eq!(result, Err(Ok(Error::TransferNotAllowed)));
+
+        assert_eq!(client.balance(&alice), 1);
+        assert_eq!(client.balance(&bob), 0);
     }
 
     #[test]
@@ -324,8 +385,8 @@ mod tests {
         let (env, admin, client) = setup();
         let alice = Address::generate(&env);
 
-        client.mint(&admin, &alice, &5).unwrap();
-        client.burn(&admin, &alice, &3).unwrap();
+        client.mint(&admin, &alice, &5);
+        client.burn(&admin, &alice, &3);
 
         assert_eq!(client.balance(&alice), 2);
         assert_eq!(client.total_supply(), 2);
@@ -337,7 +398,7 @@ mod tests {
         let alice = Address::generate(&env);
         let attacker = Address::generate(&env);
 
-        client.mint(&admin, &alice, &5).unwrap();
+        client.mint(&admin, &alice, &5);
 
         let result = client.try_burn(&attacker, &alice, &1);
         assert_eq!(result, Err(Ok(Error::Unauthorized)));
@@ -357,7 +418,8 @@ cargo test --package soulbound-token
 cargo test --package soulbound-token -- --nocapture
 ```
 
-Expected output: all tests pass, including the `#[should_panic]` transfer tests.
+Expected output: all tests pass, including the transfer tests that assert the
+`TransferNotAllowed` contract error.
 
   </TabItem>
 </Tabs>
@@ -369,11 +431,11 @@ Expected output: all tests pass, including the `#[should_panic]` transfer tests.
 ### Non-Transferability Enforcement
 
 The core invariant is enforced by implementing `transfer` and `transfer_from`
-as unconditional panics:
+as unconditional rejections:
 
 ```rust
-pub fn transfer(_env: Env, _from: Address, _to: Address, _amount: i128) {
-    panic!("soulbound: transfer not allowed — tokens are permanently bound to the holder");
+pub fn transfer(_env: Env, _from: Address, _to: Address, _amount: i128) -> Result<(), Error> {
+    Err(Error::TransferNotAllowed)
 }
 ```
 
@@ -381,7 +443,7 @@ This means:
 
 - No amount of balance will allow a transfer to succeed.
 - There is no bypass, allowance, or admin override for transfers.
-- Clients receive a descriptive panic message rather than a silent no-op.
+- Clients receive a descriptive contract error rather than a silent no-op.
 
 ### Admin Authorization
 
@@ -409,14 +471,14 @@ error. After burning, the holder's balance decreases and the total supply shrink
 
 ### Comparison: Token Types
 
-| Property                | Basic Token          | Soulbound Token     |
-| ----------------------- | -------------------- | ------------------- |
-| **Transfer**            | ✅ Allowed           | ❌ Always panics    |
-| **Transfer-from**       | ✅ Allowed           | ❌ Always panics    |
-| **Approve / Allowance** | ✅ Supported         | ❌ Not available    |
-| **Mint**                | Anyone               | Admin only          |
-| **Burn**                | Holder self-burns    | Admin only          |
-| **Use-case**            | Currency, governance | Credentials, badges |
+| Property                | Basic Token          | Soulbound Token      |
+| ----------------------- | -------------------- | -------------------- |
+| **Transfer**            | ✅ Allowed           | ❌ Always rejected   |
+| **Transfer-from**       | ✅ Allowed           | ❌ Always rejected   |
+| **Approve / Allowance** | ✅ Supported         | ❌ Not available     |
+| **Mint**                | Anyone               | Admin only           |
+| **Burn**                | Holder self-burns    | Admin only           |
+| **Use-case**            | Currency, governance | Credentials, badges  |
 
 </PatternSection>
 
@@ -426,9 +488,10 @@ error. After burning, the holder's balance decreases and the total supply shrink
    burn from any address. For high-stakes deployments, use a multi-sig wallet
    or a governance contract as the admin to eliminate single-party control.
 
-2. **No transfer path, full stop.** Both `transfer` and `transfer_from` panic —
-   they are not merely guarded by access control. There is no admin override,
-   no escape hatch, and no indirect transfer route via allowances.
+2. **No transfer path, full stop.** Both `transfer` and `transfer_from` always
+   fail with `Error::TransferNotAllowed` — they are not merely guarded by access
+   control. There is no admin override, no escape hatch, and no indirect
+   transfer route via allowances.
 
 3. **Burn = revocation.** The admin's ability to burn is equivalent to revoking
    a credential. Issuers should publish a clear off-chain revocation policy and
