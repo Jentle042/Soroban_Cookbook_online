@@ -855,6 +855,42 @@ mod tests {
         assert_eq!(result, Err(Ok(Error::CampaignNotFailed)));
     }
 
+    /// Locks the refund rule end to end: a contributor is refunded only when
+    /// the deadline has passed *and* the goal was missed. Drives `fund`,
+    /// `refund` and `withdraw`; every failure path is a contract error
+    /// surfaced through `try_` rather than a panic.
+    #[test]
+    fn test_refund_only_when_deadline_passed_and_goal_missed() {
+        let Setup {
+            env,
+            creator,
+            client,
+            token_addr,
+            ..
+        } = setup();
+        let contributor = Address::generate(&env);
+        let token_client = token::Client::new(&env, &token_addr);
+        contribute(&env, &token_addr, &client, &contributor, 400); // goal missed
+
+        // Before the deadline the campaign has not failed: contract error.
+        assert_eq!(
+            client.try_refund(&contributor),
+            Err(Ok(Error::CampaignNotFailed))
+        );
+
+        // After the deadline with the goal missed: the creator cannot withdraw,
+        // but the contributor gets the contribution back.
+        advance_time(&env, ONE_DAY);
+        assert_eq!(
+            client.try_withdraw(&creator),
+            Err(Ok(Error::GoalNotReached))
+        );
+        assert_eq!(client.refund(&contributor), 400);
+        assert_eq!(client.state(), CrowdfundState::Failed);
+        assert_eq!(token_client.balance(&contributor), 400);
+        assert_eq!(token_client.balance(&client.address), 0);
+    }
+
     #[test]
     fn test_refund_each_contributor_once_after_failure() {
         let Setup {
