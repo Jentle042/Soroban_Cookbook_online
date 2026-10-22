@@ -18,6 +18,16 @@ Soroban addresses can represent **classic Stellar accounts** (`G…`) or **contr
 
 This is a different trust model from calling `require_auth` inside a normal application contract. Application contracts declare *who* must authorize; custom accounts define *how* that authorization is proven and which policies apply.
 
+:::warning Key handling and network risk
+Custom-account signatures authorize specific calls, so treat every signing or deployment workflow as security-sensitive:
+
+- **Protect keys.** Never commit or paste secret keys or seed phrases into source files, shell history, chat, or issue reports. Prefer a named Stellar CLI identity or a wallet extension so raw secrets stay with the signer.
+- **Use the right network.** Testnet is for experimentation; mainnet transactions can move real funds and are generally irreversible. Before signing or deploying, verify the network passphrase, RPC endpoint, contract address, and exact authorization being approved.
+- **Treat public RPC endpoints carefully.** A public endpoint is third-party infrastructure, not a security check or a substitute for careful operations. Use a trusted provider and independently verify transaction details, especially when real funds are involved.
+
+See [API Security](../getting-started/api-security.md) for wallet signing guidance and [Deploy to Mainnet](../getting-started/deploy-mainnet.md) for production safeguards.
+:::
+
 ## Mental model
 
 | Role | What it does |

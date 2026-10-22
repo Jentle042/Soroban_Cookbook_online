@@ -70,6 +70,16 @@ sequenceDiagram
     Vault-->>User: ok
 ```
 
+:::caution Key handling and network risk
+Cross-contract flows like this one are signed by a real account when you run them on a network. Before you invoke or deploy anything:
+
+- **Never commit, paste, or share secret keys or seed phrases.** Keep them out of source files, test fixtures, `.env` files, shell history, chat, screenshots, and issue reports. Prefer a named identity (for example `stellar keys generate --global <alias>` and `--source-account <alias>`) or a wallet extension (for example Freighter) so the secret never leaves the signer.
+- **Treat testnet and mainnet differently.** Testnet is for experimentation; mainnet moves real funds and is effectively irreversible. Contract IDs differ per network, so confirm the network passphrase and verify every callee address before signing. A wrong callee address on mainnet can send funds to the wrong contract. Prefer an explicit `--network testnet` over relying on a default.
+- **RPC and public endpoints are not a substitute for careful ops.** A public endpoint can be rate-limited, lag, or be run by an untrusted operator, and it does not validate your intent. Use your own or a trusted RPC provider for anything touching real value, and never send secrets or API tokens through an endpoint you do not control.
+
+See [API Security](../getting-started/api-security.md) and [Deploy to Mainnet](../getting-started/deploy-mainnet.md) for the canonical checklists. The rules above stand on their own.
+:::
+
 ## Invocation patterns
 
 ### Direct invocation (typed client)
