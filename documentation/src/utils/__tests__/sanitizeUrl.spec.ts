@@ -6,17 +6,23 @@ describe('sanitizeUrl', () => {
     const dangerous = [
       'javascript:alert(1)',
       'JAVASCRIPT:alert(1)',
+      'JaVaScRiPt:alert(1)',
+      '   JaVaScRiPt:alert(1)',
       '  javascript:alert(1)',
       '\tjavascript:alert(1)',
       'data:text/html,<script>',
       'DATA:text/html,<script>',
+      'DaTa:text/html,<script>',
+      '   data:text/html,<script>',
+      '   DaTa:text/html,<script>',
+      '\tDaTa:text/html,<script>',
       'vbscript:msgbox(1)',
       'livescript:alert(1)',
     ];
 
     dangerous.forEach((url) => {
       it(`blocks "${url}"`, () => {
-        expect(sanitizeUrl(url)).toBe('#');
+        expect(sanitizeUrl(url)).toBe('');
       });
     });
   });
