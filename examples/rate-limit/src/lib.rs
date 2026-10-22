@@ -291,12 +291,15 @@ mod tests {
             client.try_try_act(&caller),
             Err(Ok(Error::RateLimitExceeded))
         );
+        assert_eq!(client.remaining(&caller), 0);
 
-        // Advance ledger time past the 10-second window.
-        env.ledger().set_timestamp(env.ledger().timestamp() + 11);
+        // At the 10-second boundary, the quota is available again.
+        env.ledger().set_timestamp(env.ledger().timestamp() + 10);
+        assert_eq!(client.remaining(&caller), 3);
 
         // The counter has reset, so another action succeeds.
         assert_eq!(client.try_act(&caller), 2);
+        assert_eq!(client.remaining(&caller), 2);
     }
 
     // ── Different addresses independent ───────────────────────────────────────

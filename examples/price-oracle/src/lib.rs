@@ -445,6 +445,32 @@ mod tests {
     }
 
     #[test]
+    fn test_get_price_checked_rejects_stale_and_non_admin_cannot_set_price() {
+        let (env, _, client) = setup();
+        let asset = Symbol::new(&env, "USD");
+
+        // Admin publishes a price at t = 0.
+        client.set_price(&asset, &1_000_000_i128, &6);
+
+        // Advance ledger by 7 200 seconds (2 hours).
+        env.ledger().with_mut(|info| {
+            info.timestamp += 7_200;
+        });
+
+        // Stale timestamp must be rejected with a contract error (not unwrap).
+        let result = client.try_get_price_checked(&asset, &3600_u64);
+        assert_eq!(result, Err(Ok(OracleError::StalePrice)));
+
+        // A non-admin must not be able to set_price.
+        let non_admin = Address::generate(&env);
+        let result = client
+            .mock_auths(&[])
+            .try_set_price(&asset, &2_000_000_i128, &6);
+        assert!(result.is_err());
+        let _ = non_admin;
+    }
+
+    #[test]
     fn test_get_price_checked_at_exact_boundary() {
         let (env, _, client) = setup();
         let asset = Symbol::new(&env, "EUR");

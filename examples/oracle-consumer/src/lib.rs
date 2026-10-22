@@ -1,3 +1,4 @@
+
 // SPDX-License-Identifier: MIT
 
 #![no_std]
@@ -372,4 +373,5 @@ mod tests {
         client.set_max_age(&7200);
         assert_eq!(client.get_max_age(), 7200);
     }
+
 }

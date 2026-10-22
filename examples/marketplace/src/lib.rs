@@ -187,3 +187,81 @@ impl Marketplace {
             .get(&DataKey::Listing(listing_id))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::{
+        testutils::{Address as _, AuthorizedFunction, AuthorizedInvocation},
+        token::{Client as TokenClient, StellarAssetClient},
+        Address, Bytes, Env, IntoVal, Symbol,
+    };
+
+    fn setup() -> (Env, MarketplaceClient<'static>, Address, Address, Address, Address) {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, Marketplace);
+        let client = MarketplaceClient::new(&env, &contract_id);
+        client.init();
+
+        let seller = Address::generate(&env);
+        let buyer = Address::generate(&env);
+
+        let token_admin = Address::generate(&env);
+        let token_id = env.register_stellar_asset_contract(token_admin.clone());
+        let token_admin_client = StellarAssetClient::new(&env, &token_id);
+        token_admin_client.mint(&buyer, &1000);
+
+        (env, client, seller, buyer, token_id, contract_id)
+    }
+
+    #[test]
+    fn test_buy_pays_seller_once_and_second_buy_fails() {
+        let (env, client, seller, buyer, token_id, contract_id) = setup();
+
+        let nft_id = Bytes::from_slice(&env, b"nft-1");
+        let price: i128 = 100;
+
+        let listing_id = client.list(&seller, &token_id, &price, &nft_id);
+
+        // Buy the listing.
+        client.buy(&buyer, &listing_id);
+
+        let token_client = TokenClient::new(&env, &token_id);
+        assert_eq!(token_client.balance(&seller), price);
+        assert_eq!(token_client.balance(&buyer), 1000 - price);
+
+        let listing = client.get_listing(&listing_id).unwrap();
+        assert_eq!(listing.state, ListingState::Sold);
+
+        // A second buy of the same listing must fail with AlreadyClosed.
+        let result = client.try_buy(&buyer, &listing_id);
+        assert_eq!(result, Err(Ok(Error::AlreadyClosed)));
+
+        // Seller balance must be unchanged after the failed second buy.
+        assert_eq!(token_client.balance(&seller), price);
+        assert_eq!(token_client.balance(&buyer), 1000 - price);
+    }
+
+    #[test]
+    fn test_cancel_prevents_buy() {
+        let (env, client, seller, buyer, token_id, _contract_id) = setup();
+
+        let nft_id = Bytes::from_slice(&env, b"nft-2");
+        let price: i128 = 50;
+
+        let listing_id = client.list(&seller, &token_id, &price, &nft_id);
+        client.cancel(&seller, &listing_id);
+
+        let listing = client.get_listing(&listing_id).unwrap();
+        assert_eq!(listing.state, ListingState::Cancelled);
+
+        let result = client.try_buy(&buyer, &listing_id);
+        assert_eq!(result, Err(Ok(Error::AlreadyClosed)));
+
+        let token_client = TokenClient::new(&env, &token_id);
+        assert_eq!(token_client.balance(&seller), 0);
+        assert_eq!(token_client.balance(&buyer), 1000);
+    }
+}
